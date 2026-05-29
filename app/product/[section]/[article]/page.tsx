@@ -45,9 +45,17 @@ export default async function ProductPage({ params }: Props) {
   return (
     <main className="min-h-screen bg-neutral-100 p-8 text-neutral-900">
       <div className="mx-auto max-w-7xl">
-        <Link href="/" className="text-sm text-neutral-500">
-          ← Назад в каталог
-        </Link>
+        <Link
+
+  href={`/section/${encodeURIComponent(decodedSection)}`}
+
+  className="text-sm text-neutral-500"
+
+>
+
+  ← Назад в раздел
+
+</Link>
 
         <header className="mt-6 mb-8">
           <div className="text-sm text-neutral-500">{decodedSection}</div>

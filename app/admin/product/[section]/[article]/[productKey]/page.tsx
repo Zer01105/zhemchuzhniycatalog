@@ -198,8 +198,8 @@ export default function AdminProductPage() {
       <div className="mx-auto max-w-7xl">
         <div className="flex gap-4">
           <Link href="/admin" className="text-sm text-neutral-500">
-            ← В админку
-          </Link>
+  ← В админку
+</Link>
 
           <Link
             href={`/product/${encodeURIComponent(

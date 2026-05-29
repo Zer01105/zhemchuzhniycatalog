@@ -46,16 +46,28 @@ function parseJewelryFile(file: string, folderArticle: string) {
 
 export async function GET() {
   try {
-    const sections = fs.readdirSync(ROOT);
+    const sections = fs
+
+  .readdirSync(ROOT)
+
+  .filter((item) =>
+
+    fs.statSync(path.join(ROOT, item)).isDirectory()
+
+  );
 
     const data = sections.map((section) => {
       const sectionPath = path.join(ROOT, section);
 
       const articles = fs
-        .readdirSync(sectionPath)
-        .filter((item) =>
-          fs.statSync(path.join(sectionPath, item)).isDirectory()
-        )
+
+  .readdirSync(sectionPath)
+
+  .filter((item) =>
+
+    fs.statSync(path.join(sectionPath, item)).isDirectory()
+
+  )
         .flatMap((folderArticle) => {
           const articlePath = path.join(sectionPath, folderArticle);
 
