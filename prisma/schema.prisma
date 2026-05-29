@@ -1,0 +1,60 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:/data/catalog/app.db"
+}
+
+model User {
+  id        String   @id @default(cuid())
+  login     String   @unique
+  password  String
+  role      String   @default("client")
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+model Tag {
+  id        String       @id @default(cuid())
+  name      String       @unique
+  slug      String       @unique
+  createdAt DateTime     @default(now())
+  articles  ArticleTag[]
+}
+
+model ArticleTag {
+  id        String   @id @default(cuid())
+  section   String
+  article   String
+  tagId     String
+  tag       Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([section, article, tagId])
+}
+model ArticleMeta {
+  id          String   @id @default(cuid())
+  section     String
+  article     String
+  weight      String?
+  price       String?
+  material    String?
+  description String?
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+
+  @@unique([section, article])
+}
+model ArticleAttribute {
+  id        String   @id @default(cuid())
+  section   String
+  article   String
+  name      String
+  value     String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([section, article, name])
+}
