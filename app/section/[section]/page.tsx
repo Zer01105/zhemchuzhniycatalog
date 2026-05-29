@@ -29,9 +29,58 @@ type ArticleTag = {
   id: string;
   section: string;
   article: string;
+  productKey: string;
   tagId: string;
   tag: Tag;
 };
+
+function ProductCard({
+  sectionName,
+  article,
+}: {
+  sectionName: string;
+  article: Article;
+}) {
+  return (
+    <Link
+      key={`${article.article}-${article.productKey || article.article}`}
+      href={
+        article.productKey
+          ? `/product/${encodeURIComponent(sectionName)}/${encodeURIComponent(
+              article.article
+            )}/${encodeURIComponent(article.productKey)}`
+          : `/product/${encodeURIComponent(sectionName)}/${encodeURIComponent(
+              article.article
+            )}`
+      }
+      className="rounded-2xl bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
+    >
+      <div className="text-xl font-semibold">
+        {article.title || article.article}
+      </div>
+
+      <div className="mt-2 text-sm text-neutral-500">
+        Фото: {article.images.length}
+      </div>
+
+      <div className="mt-4 flex h-80 w-full items-center justify-center overflow-hidden rounded-xl bg-white">
+        {article.images[0] && (
+          <img
+            src={`/api/preview?section=${encodeURIComponent(
+              sectionName
+            )}&article=${encodeURIComponent(
+              article.article
+            )}&file=${encodeURIComponent(article.images[0])}`}
+            alt={article.images[0]}
+            loading="lazy"
+            decoding="async"
+            className="h-full w-full object-contain"
+          />
+        )}
+      </div>
+    </Link>
+  );
+}
 
 export default function SectionPage() {
   const params = useParams();
@@ -41,6 +90,7 @@ export default function SectionPage() {
   const [articleTags, setArticleTags] = useState<ArticleTag[]>([]);
   const [query, setQuery] = useState("");
   const [activeTagIds, setActiveTagIds] = useState<string[]>([]);
+  const [viewMode, setViewMode] = useState<"products" | "sets">("products");
 
   useEffect(() => {
     fetch("/api/catalog")
@@ -67,21 +117,59 @@ export default function SectionPage() {
     new Map(articleTags.map((item) => [item.tag.id, item.tag])).values()
   );
 
-  const filteredArticles = articles.filter((item) => {
-    const matchesQuery = item.article
-      .toLowerCase()
-      .includes(query.toLowerCase());
+  const normalizedQuery = query.trim().toLowerCase();
+  const normalizedQueryNoZeros = normalizedQuery.replace(/^0+/, "");
 
-    const matchesTag =
-      activeTagIds.length === 0 ||
-      activeTagIds.every((tagId) =>
-        articleTags.some(
-          (tag) => tag.article === item.article && tag.tagId === tagId
-        )
-      );
+  const filteredArticles = articles.filter((item) => {
+    const searchText = [
+      item.article,
+      item.title,
+      item.model,
+      item.productKey,
+      item.productType,
+      item.modification,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+
+    const searchTextNoZeros = searchText.replace(/\b0+/g, "");
+
+    const matchesQuery =
+      !normalizedQuery ||
+      searchText.includes(normalizedQuery) ||
+      (!!normalizedQueryNoZeros &&
+        searchTextNoZeros.includes(normalizedQueryNoZeros));
+
+const matchesTag =
+  activeTagIds.length === 0 ||
+  activeTagIds.every((tagId) =>
+    articleTags.some(
+      (tag) =>
+        tag.article === item.article &&
+        tag.productKey === (item.productKey || "") &&
+        tag.tagId === tagId
+    )
+  );
 
     return matchesQuery && matchesTag;
   });
+
+  const groupedByModel = Array.from(
+    filteredArticles
+      .reduce((map, article) => {
+        const model = article.model || article.article;
+
+        if (!map.has(model)) {
+          map.set(model, []);
+        }
+
+        map.get(model)!.push(article);
+
+        return map;
+      }, new Map<string, Article[]>())
+      .entries()
+  );
 
   return (
     <main className="min-h-screen bg-neutral-100 p-8 text-neutral-900">
@@ -103,6 +191,30 @@ export default function SectionPage() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
+
+        <div className="mb-4 flex flex-wrap gap-2">
+          <button
+            onClick={() => setViewMode("products")}
+            className={`rounded-full px-4 py-2 text-sm ${
+              viewMode === "products"
+                ? "bg-neutral-900 text-white"
+                : "bg-white text-neutral-700"
+            }`}
+          >
+            По изделиям
+          </button>
+
+          <button
+            onClick={() => setViewMode("sets")}
+            className={`rounded-full px-4 py-2 text-sm ${
+              viewMode === "sets"
+                ? "bg-neutral-900 text-white"
+                : "bg-white text-neutral-700"
+            }`}
+          >
+            По комплектам
+          </button>
+        </div>
 
         <div className="mb-8 flex flex-wrap gap-2">
           <button
@@ -135,47 +247,49 @@ export default function SectionPage() {
           })}
         </div>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3 lg:grid-cols-4">
-          {filteredArticles.map((article) => (
-            <Link
-              key={article.article}
-              href={
-  article.productKey
-    ? `/product/${encodeURIComponent(sectionName)}/${encodeURIComponent(
-        article.article
-      )}/${encodeURIComponent(article.productKey)}`
-    : `/product/${encodeURIComponent(sectionName)}/${encodeURIComponent(
-        article.article
-      )}`
-}
-              className="rounded-2xl bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
-            >
-              <div className="text-xl font-semibold">
-  {article.title || article.article}
-</div>
+        {viewMode === "products" ? (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3 lg:grid-cols-4">
+            {filteredArticles.map((article) => (
+              <ProductCard
+                key={`${article.article}-${article.productKey || article.article}`}
+                sectionName={sectionName}
+                article={article}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-8">
+            {groupedByModel.map(([model, modelArticles]) => (
+              <section
+                key={model}
+                className="rounded-3xl bg-white/60 p-5 shadow-sm ring-1 ring-neutral-200"
+              >
+                <div className="mb-4 flex items-center justify-between">
+                  <div>
+                    <div className="text-sm text-neutral-500">Модель</div>
+                    <h2 className="text-2xl font-semibold">{model}</h2>
+                  </div>
 
-              <div className="mt-2 text-sm text-neutral-500">
-                Фото: {article.images.length}
-              </div>
+                  <div className="text-sm text-neutral-500">
+                    Изделий: {modelArticles.length}
+                  </div>
+                </div>
 
-              <div className="mt-4 flex h-80 w-full items-center justify-center overflow-hidden rounded-xl bg-white">
-                {article.images[0] && (
-                  <img
-                    src={`/api/preview?section=${encodeURIComponent(
-                      sectionName
-                    )}&article=${encodeURIComponent(
-                      article.article
-                    )}&file=${encodeURIComponent(article.images[0])}`}
-                    alt={article.images[0]}
-                    loading="lazy"
-                    decoding="async"
-                    className="h-full w-full object-contain"
-                  />
-                )}
-              </div>
-            </Link>
-          ))}
-        </div>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-3 lg:grid-cols-4">
+                  {modelArticles.map((article) => (
+                    <ProductCard
+                      key={`${article.article}-${
+                        article.productKey || article.article
+                      }`}
+                      sectionName={sectionName}
+                      article={article}
+                    />
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+        )}
       </div>
     </main>
   );

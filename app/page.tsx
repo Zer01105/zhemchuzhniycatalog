@@ -37,6 +37,7 @@ type ArticleTag = {
   id: string;
   section: string;
   article: string;
+  productKey: string;
   tagId: string;
   tag: Tag;
 };
@@ -102,16 +103,17 @@ export default function Home() {
         (!!normalizedQueryNoZeros &&
           searchTextNoZeros.includes(normalizedQueryNoZeros));
 
-      const matchesTag =
-        activeTagIds.length === 0 ||
-        activeTagIds.every((tagId) =>
-          articleTags.some(
-            (tag) =>
-              tag.section === item.section &&
-              tag.article === item.article &&
-              tag.tagId === tagId
-          )
-        );
+     const matchesTag =
+  activeTagIds.length === 0 ||
+  activeTagIds.every((tagId) =>
+    articleTags.some(
+      (tag) =>
+        tag.section === item.section &&
+        tag.article === item.article &&
+        tag.productKey === (item.productKey || "") &&
+        tag.tagId === tagId
+    )
+  );
 
       return matchesQuery && matchesTag;
     });

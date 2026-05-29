@@ -24,14 +24,23 @@ model Tag {
 }
 
 model ArticleTag {
-  id        String   @id @default(cuid())
-  section   String
-  article   String
-  tagId     String
-  tag       Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
 
-  @@unique([section, article, tagId])
+  id         String   @id @default(cuid())
+
+  section    String
+
+  article    String
+
+  productKey String   @default("")
+
+  tagId      String
+
+  createdAt  DateTime @default(now())
+
+  tag Tag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([section, article, productKey, tagId])
+
 }
 model ArticleMeta {
   id          String   @id @default(cuid())
@@ -47,14 +56,15 @@ model ArticleMeta {
   @@unique([section, article])
 }
 model ArticleAttribute {
-  id        String   @id @default(cuid())
-  section   String
-  article   String
-  name      String
-  value     String
-  sortOrder Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         String   @id @default(cuid())
+  section    String
+  article    String
+  productKey String   @default("")
+  name       String
+  value      String
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-  @@unique([section, article, name])
+  @@unique([section, article, productKey, name])
 }

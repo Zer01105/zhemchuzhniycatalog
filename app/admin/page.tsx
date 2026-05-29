@@ -5,7 +5,12 @@ import { useEffect, useMemo, useState } from "react";
 
 type Article = {
   article: string;
+  title?: string;
   images: string[];
+  productKey?: string;
+  model?: string;
+  productType?: string;
+  modification?: string;
 };
 
 type Section = {
@@ -36,6 +41,7 @@ const [tagStatus, setTagStatus] = useState("");
   const [clients, setClients] = useState<ClientUser[]>([]);
 const [clientLogin, setClientLogin] = useState("");
 const [clientPassword, setClientPassword] = useState("");
+const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
 const [clientStatus, setClientStatus] = useState("");
 const [lastCreatedClient, setLastCreatedClient] = useState<{
 
@@ -52,6 +58,8 @@ const [lastCreatedClient, setLastCreatedClient] = useState<{
   const [isUploading, setIsUploading] = useState(false);
 const [importFile, setImportFile] = useState<File | null>(null);
 const [importStatus, setImportStatus] = useState("");
+const [autoTagStatus, setAutoTagStatus] = useState("");
+const [isSyncingAutoTags, setIsSyncingAutoTags] = useState(false);
 const [isImporting, setIsImporting] = useState(false);
   async function loadCatalog() {
     const res = await fetch("/api/catalog");
@@ -97,6 +105,12 @@ async function createTag(e: React.FormEvent) {
   setTagStatus(`Тег создан: ${data.tag.name}`);
   setTagName("");
   await loadTags();
+}
+function toggleSection(sectionName: string) {
+  setOpenSections((current) => ({
+    ...current,
+    [sectionName]: !current[sectionName],
+  }));
 }
 async function importCatalogData(e: React.FormEvent) {
   e.preventDefault();
@@ -199,7 +213,36 @@ async function toggleClient(user: ClientUser) {
     await loadClients();
   }
 }
+async function syncProductTypeTags() {
+  const ok = confirm(
+    "Распределить автоматические теги Кольцо/Серьги/Кулон/Брошь по названию файлов?"
+  );
 
+  if (!ok) return;
+
+  setIsSyncingAutoTags(true);
+  setAutoTagStatus("Распределение тегов...");
+
+  const res = await fetch("/api/admin/sync-product-type-tags", {
+    method: "POST",
+  });
+
+  const data = await res.json();
+
+  if (!res.ok) {
+    setAutoTagStatus(data.error || "Ошибка распределения тегов.");
+    setIsSyncingAutoTags(false);
+    return;
+  }
+
+  setAutoTagStatus(
+    `Готово. Создано тегов: ${data.created}, назначено: ${data.linked}.`
+  );
+
+  setIsSyncingAutoTags(false);
+  await loadTags();
+  await loadCatalog();
+}
 async function deleteClient(user: ClientUser) {
   const ok = confirm(`Удалить клиента ${user.login}? Это действие нельзя отменить.`);
 
@@ -421,6 +464,32 @@ async function deleteArticle(sectionName: string, articleName: string) {
   >
     Очистить все характеристики и теги
   </button>
+</section>
+<section className="mb-8 rounded-2xl bg-white p-5 shadow-sm border border-blue-200">
+  <h2 className="text-2xl font-semibold text-blue-700">
+    Автоматические теги
+  </h2>
+
+  <p className="mt-2 text-sm text-neutral-500">
+    Назначает теги Кольцо, Серьги, Кулон, Брошь по первой цифре в названии файла.
+    Работает только для разделов Золото и Серебро.
+  </p>
+
+  <button
+    onClick={syncProductTypeTags}
+    disabled={isSyncingAutoTags}
+    className="mt-4 rounded-xl bg-blue-700 px-4 py-3 text-white disabled:opacity-50"
+  >
+    {isSyncingAutoTags
+      ? "Распределение..."
+      : "Распределить автоматические теги"}
+  </button>
+
+  {autoTagStatus && (
+    <div className="mt-4 rounded-xl bg-neutral-100 px-4 py-3 text-sm text-neutral-700">
+      {autoTagStatus}
+    </div>
+  )}
 </section>
 <section className="mb-8 rounded-2xl bg-white p-5 shadow-sm">
   <h2 className="text-2xl font-semibold">Теги</h2>
@@ -679,67 +748,109 @@ async function deleteArticle(sectionName: string, articleName: string) {
         />
 
         <div className="space-y-8">
-          {filteredCatalog.map((section) => (
-            <section key={section.section} className="rounded-2xl bg-white p-5 shadow-sm">
-              <div className="mb-4 flex items-center justify-between">
-                <div>
-                  <h2 className="text-2xl font-semibold">{section.section}</h2>
-                  <p className="text-sm text-neutral-500">
-                    Артикулов: {section.articles.length}
-                  </p>
-                </div>
+          {filteredCatalog.map((section) => {
+  const isOpen = !!openSections[section.section];
 
-                <Link
-                  href={`/section/${encodeURIComponent(section.section)}`}
-                  className="rounded-xl bg-neutral-900 px-4 py-2 text-sm text-white"
-                >
-                  Открыть раздел
-                </Link>
-              </div>
+  return (
+    <section key={section.section} className="rounded-2xl bg-white p-5 shadow-sm">
+      <div className="mb-4 flex items-center justify-between">
+        <button
+          onClick={() => toggleSection(section.section)}
+          className="text-left"
+        >
+          <h2 className="text-2xl font-semibold">
+            {isOpen ? "▾" : "▸"} {section.section}
+          </h2>
+          <p className="text-sm text-neutral-500">
+            Изделий: {section.articles.length}
+          </p>
+        </button>
 
-              <div className="overflow-hidden rounded-xl border border-neutral-200">
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-neutral-50 text-neutral-500">
-                    <tr>
-                      <th className="p-3">Артикул</th>
-                      <th className="p-3">Фото</th>
-                      <th className="p-3">Действия</th>
-                    </tr>
-                  </thead>
-
-                  <tbody>
-                    {section.articles.map((article) => (
-                      <tr key={article.article} className="border-t border-neutral-200">
-                        <td className="p-3 font-medium">{article.article}</td>
-                        <td className="p-3 text-neutral-500">
-                          {article.images.length}
-                        </td>
-                        <td className="flex gap-3 p-3">
-  <Link
-    href={`/admin/product/${encodeURIComponent(
-  section.section
-)}/${encodeURIComponent(article.article)}`}
-    className="text-neutral-900 underline"
-  >
-    Открыть
-  </Link>
-
-  <button
-    onClick={() => deleteArticle(section.section, article.article)}
-    className="text-red-600 underline"
-  >
-    Удалить
-  </button>
-</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          ))}
-        </div>
+        <Link
+          href={`/section/${encodeURIComponent(section.section)}`}
+          className="rounded-xl bg-neutral-900 px-4 py-2 text-sm text-white"
+        >
+          Открыть раздел
+        </Link>
       </div>
-    </main>
+
+      {isOpen && (
+        <div className="overflow-hidden rounded-xl border border-neutral-200">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-neutral-50 text-neutral-500">
+              <tr>
+                <th className="p-3">Изделие</th>
+                <th className="p-3">Модель</th>
+                <th className="p-3">Фото</th>
+                <th className="p-3">Действия</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {section.articles.map((article) => (
+                <tr
+                  key={`${article.article}-${article.productKey || article.article}`}
+                  className="border-t border-neutral-200"
+                >
+                  <td className="p-3 font-medium">
+                    {article.title || article.article}
+                    {article.productKey && (
+                      <div className="mt-1 text-xs text-neutral-500">
+                        {article.productKey.replaceAll("-", ".")}
+                      </div>
+                    )}
+                  </td>
+
+                  <td className="p-3 text-neutral-500">
+                    {article.model || article.article}
+                  </td>
+
+                  <td className="p-3 text-neutral-500">
+                    {article.images.length}
+                  </td>
+
+                  <td className="flex gap-3 p-3">
+                    <Link
+                      href={
+                        article.productKey
+                          ? `/admin/product/${encodeURIComponent(
+                              section.section
+                            )}/${encodeURIComponent(
+                              article.article
+                            )}/${encodeURIComponent(article.productKey)}`
+                          : `/admin/product/${encodeURIComponent(
+                              section.section
+                            )}/${encodeURIComponent(article.article)}`
+                      }
+                      className="text-neutral-900 underline"
+                    >
+                      Открыть
+                    </Link>
+
+                    <button
+                      onClick={() =>
+                        deleteArticle(section.section, article.article)
+                      }
+                      className="text-red-600 underline"
+                    >
+                      Удалить
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
   );
+})}
+        </div>
+
+      </div>
+
+    </main>
+
+  );
+
 }

@@ -6,6 +6,7 @@ export async function GET(req: NextRequest) {
 
   const section = searchParams.get("section");
   const article = searchParams.get("article");
+  const productKey = searchParams.get("productKey") || "";
 
   if (!section || !article) {
     return NextResponse.json(
@@ -18,6 +19,7 @@ export async function GET(req: NextRequest) {
     where: {
       section,
       article,
+      productKey,
     },
     include: {
       tag: true,
@@ -31,7 +33,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const { section, article, tagId } = await req.json();
+  const { section, article, productKey = "", tagId } = await req.json();
 
   if (!section || !article || !tagId) {
     return NextResponse.json(
@@ -42,9 +44,10 @@ export async function POST(req: NextRequest) {
 
   const articleTag = await prisma.articleTag.upsert({
     where: {
-      section_article_tagId: {
+      section_article_productKey_tagId: {
         section,
         article,
+        productKey,
         tagId,
       },
     },
@@ -52,6 +55,7 @@ export async function POST(req: NextRequest) {
     create: {
       section,
       article,
+      productKey,
       tagId,
     },
     include: {
@@ -66,7 +70,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const { section, article, tagId } = await req.json();
+  const { section, article, productKey = "", tagId } = await req.json();
 
   if (!section || !article || !tagId) {
     return NextResponse.json(
@@ -79,6 +83,7 @@ export async function DELETE(req: NextRequest) {
     where: {
       section,
       article,
+      productKey,
       tagId,
     },
   });

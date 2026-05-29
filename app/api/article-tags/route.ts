@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
 
-  const section = searchParams.get("section");
+  const section = searchParams.get("section") || undefined;
 
   const articleTags = await prisma.articleTag.findMany({
     where: section ? { section } : {},

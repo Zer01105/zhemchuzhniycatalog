@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 export async function POST(req: NextRequest) {
-  const { section, article, mode } = await req.json();
+  const { section, article, productKey = "", mode } = await req.json();
 
   if (!section || !article || !mode) {
     return NextResponse.json(
@@ -16,19 +16,20 @@ export async function POST(req: NextRequest) {
       where: {
         section,
         article,
+        productKey,
       },
     });
   }
 
   if (mode === "meta" || mode === "all") {
-    await prisma.articleMeta.deleteMany({
+    await prisma.articleAttribute.deleteMany({
       where: {
         section,
         article,
+        productKey,
       },
     });
   }
 
   return NextResponse.json({ ok: true });
 }
-

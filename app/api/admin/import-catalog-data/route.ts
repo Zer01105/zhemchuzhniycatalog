@@ -15,7 +15,44 @@ function clean(value: unknown) {
   return String(value).trim();
 }
 
-const SERVICE_COLUMNS = new Set(["section", "article", "tags"]);
+function getValue(row: Record<string, unknown>, names: string[]) {
+  for (const name of names) {
+    const value = clean(row[name]);
+    if (value) return value;
+  }
+
+  return "";
+}
+
+function normalizeProductKey(value: string) {
+  if (!value) return "";
+
+  const cleanValue = value.trim();
+
+  if (cleanValue.includes("-")) {
+    return cleanValue;
+  }
+
+  const parts = cleanValue.split(".");
+  const typeId = parts[0];
+  const model = parts[1]?.padStart(4, "0");
+  const modification = parts.slice(2).join(".");
+
+  if (!typeId || !model) return cleanValue;
+
+  return [typeId, model, modification || "base"].join("-");
+}
+
+const SERVICE_COLUMNS = new Set([
+  "section",
+  "article",
+  "productkey",
+  "tags",
+  "раздел",
+  "модель",
+  "изделие",
+  "теги",
+]);
 
 export async function POST(req: NextRequest) {
   try {
@@ -37,14 +74,25 @@ export async function POST(req: NextRequest) {
     let attributesUpdated = 0;
 
     for (const row of rows) {
-      const section = clean(row.section);
-      const article = clean(row.article);
-      const tagsRaw = clean(row.tags);
+      const section = getValue(row, ["section", "Раздел", "раздел"]);
+      const article = getValue(row, ["article", "Модель", "модель"]);
+      const rawProductKey = getValue(row, [
+        "productKey",
+        "productkey",
+        "Изделие",
+        "изделие",
+      ]);
+      const productKey = normalizeProductKey(rawProductKey);
+      const tagsRaw = getValue(row, ["tags", "Теги", "теги"]);
 
       if (!section || !article) continue;
 
       await prisma.articleTag.deleteMany({
-        where: { section, article },
+        where: {
+          section,
+          article,
+          productKey,
+        },
       });
 
       const tagNames = tagsRaw
@@ -72,9 +120,10 @@ export async function POST(req: NextRequest) {
 
         await prisma.articleTag.upsert({
           where: {
-            section_article_tagId: {
+            section_article_productKey_tagId: {
               section,
               article,
+              productKey,
               tagId: tag.id,
             },
           },
@@ -82,6 +131,7 @@ export async function POST(req: NextRequest) {
           create: {
             section,
             article,
+            productKey,
             tagId: tag.id,
           },
         });
@@ -90,7 +140,11 @@ export async function POST(req: NextRequest) {
       }
 
       await prisma.articleAttribute.deleteMany({
-        where: { section, article },
+        where: {
+          section,
+          article,
+          productKey,
+        },
       });
 
       let sortOrder = 0;
@@ -108,6 +162,7 @@ export async function POST(req: NextRequest) {
           data: {
             section,
             article,
+            productKey,
             name: columnName,
             value,
             sortOrder,

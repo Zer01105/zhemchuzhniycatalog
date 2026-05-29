@@ -73,15 +73,32 @@ export default async function ProductPage({ params }: Props) {
   const images = parsedImages.map((item) => item.file);
   const parsed = parsedImages[0]?.parsed;
 
-  const attributes = await prisma.articleAttribute.findMany({
-    where: {
-      section: decodedSection,
-      article: parsed?.model || decodedArticle,
-    },
-    orderBy: {
-      sortOrder: "asc",
-    },
-  });
+  const productAttributes = await prisma.articleAttribute.findMany({
+  where: {
+    section: decodedSection,
+    article: decodedArticle,
+    productKey: decodedProductKey,
+  },
+  orderBy: {
+    sortOrder: "asc",
+  },
+});
+
+const modelAttributes = await prisma.articleAttribute.findMany({
+  where: {
+    section: decodedSection,
+    article: decodedArticle,
+    productKey: "",
+  },
+  orderBy: {
+    sortOrder: "asc",
+  },
+});
+
+const attributes =
+  productAttributes.length > 0
+    ? productAttributes
+    : modelAttributes;
 
   return (
     <main className="min-h-screen bg-neutral-100 p-8 text-neutral-900">

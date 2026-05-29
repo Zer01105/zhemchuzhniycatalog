@@ -6,6 +6,7 @@ export async function GET(req: NextRequest) {
 
   const section = searchParams.get("section");
   const article = searchParams.get("article");
+  const productKey = searchParams.get("productKey") || "";
 
   if (!section || !article) {
     return NextResponse.json(
@@ -14,15 +15,31 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const attributes = await prisma.articleAttribute.findMany({
+  const productAttributes = await prisma.articleAttribute.findMany({
     where: {
       section,
       article,
+      productKey,
     },
     orderBy: {
       sortOrder: "asc",
     },
   });
 
-  return NextResponse.json(attributes);
+  if (productAttributes.length > 0) {
+    return NextResponse.json(productAttributes);
+  }
+
+  const modelAttributes = await prisma.articleAttribute.findMany({
+    where: {
+      section,
+      article,
+      productKey: "",
+    },
+    orderBy: {
+      sortOrder: "asc",
+    },
+  });
+
+  return NextResponse.json(modelAttributes);
 }
