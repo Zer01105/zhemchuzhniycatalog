@@ -49,7 +49,15 @@ async function walk(dir) {
       await walk(sourcePath);
     } else if (entry.isFile() && IMAGE_RE.test(entry.name)) {
       console.log("preview:", relativePath);
-      await processFile(sourcePath, previewPath);
+      try {
+
+  await processFile(sourcePath, previewPath);
+
+} catch (err) {
+
+  console.error("skip broken image:", relativePath, err.message);
+
+}
     }
   }
 }

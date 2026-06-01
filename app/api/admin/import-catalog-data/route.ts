@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import * as XLSX from "xlsx";
+import fs from "fs";
+import path from "path";
+
+const ROOT = process.env.CATALOG_ROOT || "/data/catalog/B2B_Фото";
 
 function slugify(value: string) {
   return value
@@ -69,6 +73,7 @@ export async function POST(req: NextRequest) {
     const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
 
     let processed = 0;
+    let skipped = 0;
     let tagsCreated = 0;
     let tagsLinked = 0;
     let attributesUpdated = 0;
@@ -85,7 +90,18 @@ export async function POST(req: NextRequest) {
       const productKey = normalizeProductKey(rawProductKey);
       const tagsRaw = getValue(row, ["tags", "Теги", "теги"]);
 
-      if (!section || !article) continue;
+      if (!section || !article) {
+        skipped++;
+        continue;
+      }
+
+      const articlePath = path.join(ROOT, section, article);
+
+      if (!fs.existsSync(articlePath)) {
+        skipped++;
+        console.log(`Пропущен артикул ${section}/${article}: нет папки`);
+        continue;
+      }
 
       await prisma.articleTag.deleteMany({
         where: {
@@ -179,6 +195,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       processed,
+      skipped,
       tagsCreated,
       tagsLinked,
       attributesUpdated,
@@ -186,9 +203,6 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error(error);
 
-    return NextResponse.json(
-      { error: "Import failed" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Import failed" }, { status: 500 });
   }
 }
