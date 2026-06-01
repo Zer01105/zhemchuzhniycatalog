@@ -95,13 +95,28 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      const articlePath = path.join(ROOT, section, article);
+      const articleVariants = [
+  article,
+  article.replace(/^0+/, ""),
+  String(Number(article)),
+];
 
-      if (!fs.existsSync(articlePath)) {
-        skipped++;
-        console.log(`Пропущен артикул ${section}/${article}: нет папки`);
-        continue;
-      }
+const articleExists = articleVariants.some((variant) =>
+  variant &&
+  fs.existsSync(
+    path.join(ROOT, section, variant)
+  )
+);
+
+if (!articleExists) {
+  skipped++;
+
+  console.log(
+    `Пропущен артикул ${section}/${article}: нет папки`
+  );
+
+  continue;
+}
 
       await prisma.articleTag.deleteMany({
         where: {
