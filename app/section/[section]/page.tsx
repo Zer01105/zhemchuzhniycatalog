@@ -55,18 +55,17 @@ function ProductCard({
       key={`${article.article}-${article.productKey || article.article}`}
       className="relative rounded-2xl bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
     >
-      {article.productKey && (
-        <FavoriteButton
-          item={{
-            section: sectionName,
-            article: article.article,
-            productKey: article.productKey,
-            title: article.title || article.article,
-            previewUrl,
-          }}
-          className="absolute right-3 top-3 z-10"
-        />
-      )}
+      <FavoriteButton
+        item={{
+          section: sectionName,
+          article: article.article,
+          productKey: article.productKey || "",
+          title: article.title || article.article,
+          previewUrl,
+        }}
+        iconOnly
+        className="absolute right-3 top-3 z-10 flex h-10 w-10 items-center justify-center p-0"
+      />
 
       <Link
         href={
@@ -113,6 +112,7 @@ export default function SectionPage() {
   const [query, setQuery] = useState("");
   const [activeTagIds, setActiveTagIds] = useState<string[]>([]);
   const [viewMode, setViewMode] = useState<"products" | "sets">("products");
+  const [filtersPinned, setFiltersPinned] = useState(true);
 
   useEffect(() => {
     fetch("/api/catalog")
@@ -199,6 +199,7 @@ const matchesTag =
   if (activeTagIds.length > 0) {
     printParams.set("tagIds", activeTagIds.join(","));
   }
+  const pdfParams = printParams.toString();
 
   return (
     <main className="min-h-screen bg-neutral-100 p-8 text-neutral-900">
@@ -218,9 +219,24 @@ const matchesTag =
           </p>
         </header>
 
-        <div className="sticky top-4 z-20 mb-8 rounded-2xl bg-neutral-100/95 p-3 shadow-sm backdrop-blur">
+        <div
+          className={`${
+            filtersPinned ? "sticky top-4 z-20" : "relative"
+          } mb-8 rounded-2xl bg-neutral-100/95 p-3 shadow-sm backdrop-blur`}
+        >
+          {filtersPinned && (
+            <button
+              type="button"
+              onClick={() => setFiltersPinned(false)}
+              aria-label="Открепить фильтры"
+              className="absolute right-2 top-2 rounded-full bg-white px-2 py-1 text-sm text-neutral-500 shadow-sm"
+            >
+              ×
+            </button>
+          )}
+
           <input
-            className="mb-4 w-full rounded-xl border border-neutral-300 bg-white px-4 py-3 outline-none"
+            className="mb-4 w-full rounded-xl border border-neutral-300 bg-white px-4 py-3 pr-10 outline-none"
             placeholder="Поиск по артикулу внутри раздела..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -255,6 +271,13 @@ const matchesTag =
             >
               Печать PDF
             </Link>
+
+            <a
+              href={`/api/pdf/catalog?${pdfParams}`}
+              className="rounded-full bg-neutral-900 px-4 py-2 text-sm text-white"
+            >
+              Скачать PDF
+            </a>
           </div>
 
           <div className="flex flex-wrap gap-2">

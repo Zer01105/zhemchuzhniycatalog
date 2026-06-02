@@ -38,6 +38,28 @@ export default function FavoritesPage() {
     loadItems();
   }
 
+  async function downloadPdf() {
+    const res = await fetch("/api/pdf/favorites", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        items,
+      }),
+    });
+
+    if (!res.ok) return;
+
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "favorites.pdf";
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <main className="min-h-screen bg-neutral-100 p-8 text-neutral-900">
       <div className="mx-auto max-w-7xl">
@@ -53,9 +75,17 @@ export default function FavoritesPage() {
 
           {items.length > 0 && (
             <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={downloadPdf}
+                className="rounded-xl bg-neutral-900 px-4 py-3 text-sm text-white"
+              >
+                Скачать PDF
+              </button>
+
               <Link
                 href="/print/favorites"
-                className="rounded-xl bg-neutral-900 px-4 py-3 text-sm text-white"
+                className="rounded-xl bg-neutral-200 px-4 py-3 text-sm text-neutral-900"
               >
                 Печать PDF
               </Link>
@@ -79,11 +109,17 @@ export default function FavoritesPage() {
                 className="rounded-2xl bg-white p-5 shadow-sm"
               >
                 <Link
-                  href={`/product/${encodeURIComponent(
-                    item.section
-                  )}/${encodeURIComponent(item.article)}/${encodeURIComponent(
+                  href={
                     item.productKey
-                  )}`}
+                      ? `/product/${encodeURIComponent(
+                          item.section
+                        )}/${encodeURIComponent(
+                          item.article
+                        )}/${encodeURIComponent(item.productKey)}`
+                      : `/product/${encodeURIComponent(
+                          item.section
+                        )}/${encodeURIComponent(item.article)}`
+                  }
                 >
                   <div className="text-sm text-neutral-500">{item.section}</div>
                   <div className="mt-1 text-xl font-semibold">{item.title}</div>

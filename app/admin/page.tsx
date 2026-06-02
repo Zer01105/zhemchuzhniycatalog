@@ -85,6 +85,7 @@ const [lastCreatedClient, setLastCreatedClient] = useState<{
 const [importFile, setImportFile] = useState<File | null>(null);
 const [importStatus, setImportStatus] = useState("");
 const [autoTagStatus, setAutoTagStatus] = useState("");
+const [autoTagLogs, setAutoTagLogs] = useState<string[]>([]);
 const [isSyncingAutoTags, setIsSyncingAutoTags] = useState(false);
 const [previewStatus, setPreviewStatus] = useState("");
 const [previewLogs, setPreviewLogs] = useState<string[]>([]);
@@ -97,12 +98,15 @@ const [ruleTagName, setRuleTagName] = useState("");
 const [ruleStatus, setRuleStatus] = useState("");
 const [isImporting, setIsImporting] = useState(false);
 const [importLogs, setImportLogs] = useState<ImportLog[]>([]);
+const [importLogFilter, setImportLogFilter] = useState<"all" | "success" | "fail">("all");
 const [selectedProducts, setSelectedProducts] = useState<
   Record<string, SelectedProduct>
 >({});
 const [bulkTagId, setBulkTagId] = useState("");
 const [bulkStatus, setBulkStatus] = useState("");
 const [bulkErrors, setBulkErrors] = useState<string[]>([]);
+const [bulkQuery, setBulkQuery] = useState("");
+const [openBulkSections, setOpenBulkSections] = useState<Record<string, boolean>>({});
   async function loadCatalog() {
     const res = await fetch("/api/catalog");
     const data = await res.json();
@@ -271,9 +275,9 @@ async function importCatalogData(e: React.FormEvent) {
   await loadTags();
 }
 function downloadImportLog() {
-  if (importLogs.length === 0) return;
+  if (filteredImportLogs.length === 0) return;
 
-  const content = importLogs
+  const content = filteredImportLogs
     .map(
       (log) =>
         [
@@ -293,7 +297,7 @@ function downloadImportLog() {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = "catalog-import-log.txt";
+  link.download = `catalog-import-log-${importLogFilter}.txt`;
   link.click();
   URL.revokeObjectURL(url);
 }
@@ -307,12 +311,10 @@ function getSelectionKey(
 }
 
 function toggleProductSelection(sectionName: string, article: Article) {
-  if (!article.productKey) return;
-
   const key = getSelectionKey(
     sectionName,
     article.article,
-    article.productKey
+    article.productKey || ""
   );
 
   setSelectedProducts((current) => {
@@ -327,11 +329,18 @@ function toggleProductSelection(sectionName: string, article: Article) {
       [key]: {
         section: sectionName,
         article: article.article,
-        productKey: article.productKey!,
+        productKey: article.productKey || "",
         title: article.title || article.article,
       },
     };
   });
+}
+
+function toggleBulkSection(sectionName: string) {
+  setOpenBulkSections((current) => ({
+    ...current,
+    [sectionName]: !current[sectionName],
+  }));
 }
 
 async function updateSelectedTags(action: "add" | "remove") {
@@ -449,6 +458,7 @@ async function syncProductTypeTags() {
 
   setIsSyncingAutoTags(true);
   setAutoTagStatus("Распределение тегов...");
+  setAutoTagLogs([]);
 
   const res = await fetch("/api/admin/sync-product-type-tags", {
     method: "POST",
@@ -458,6 +468,7 @@ async function syncProductTypeTags() {
 
   if (!res.ok) {
     setAutoTagStatus(data.error || "Ошибка распределения тегов.");
+    setAutoTagLogs(data.logs || []);
     setIsSyncingAutoTags(false);
     return;
   }
@@ -465,6 +476,7 @@ async function syncProductTypeTags() {
   setAutoTagStatus(
     `Готово. Создано тегов: ${data.created}, назначено: ${data.linked}.`
   );
+  setAutoTagLogs(data.logs || []);
 
   setIsSyncingAutoTags(false);
   await loadTags();
@@ -544,23 +556,69 @@ useEffect(() => {
   }));
 
   const selectedProductList = Object.values(selectedProducts);
+  const importSuccessCount = importLogs.filter(
+    (log) => log.status === "success"
+  ).length;
+  const importFailCount = importLogs.filter(
+    (log) => log.status === "skipped" || log.status === "error"
+  ).length;
+  const filteredImportLogs = importLogs.filter((log) => {
+    if (importLogFilter === "success") return log.status === "success";
+    if (importLogFilter === "fail") {
+      return log.status === "skipped" || log.status === "error";
+    }
+
+    return true;
+  });
   const filteredProductList = filteredCatalog.flatMap((section) =>
     section.articles
-      .filter((article) => article.productKey)
       .map((article) => ({
         section: section.section,
         article: article.article,
-        productKey: article.productKey!,
+        productKey: article.productKey || "",
         title: article.title || article.article,
         image: article.images[0] || "",
       }))
+  );
+  const normalizedBulkQuery = bulkQuery.trim().toLowerCase();
+  const bulkProductList = catalog.flatMap((section) =>
+    section.articles.map((article) => ({
+      section: section.section,
+      article: article.article,
+      productKey: article.productKey || "",
+      title: article.title || article.article,
+      image: article.images[0] || "",
+    }))
+  );
+  const filteredBulkProducts = bulkProductList.filter((item) => {
+    if (!normalizedBulkQuery) return true;
+
+    return [
+      item.section,
+      item.article,
+      item.productKey,
+      item.title,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase()
+      .includes(normalizedBulkQuery);
+  });
+  const groupedBulkProducts = Array.from(
+    filteredBulkProducts
+      .reduce((map, item) => {
+        if (!map.has(item.section)) map.set(item.section, []);
+        map.get(item.section)!.push(item);
+        return map;
+      }, new Map<string, typeof filteredBulkProducts>())
+      .entries()
   );
 
   function selectAllFilteredProducts() {
     setSelectedProducts((current) => {
       const next = { ...current };
 
-      for (const item of filteredProductList) {
+      for (const item of filteredBulkProducts) {
         next[getSelectionKey(item.section, item.article, item.productKey)] = {
           section: item.section,
           article: item.article,
@@ -740,7 +798,45 @@ async function deleteArticle(sectionName: string, articleName: string) {
           onClick={downloadImportLog}
           className="rounded-xl bg-neutral-900 px-4 py-2 text-sm text-white"
         >
-          Скачать лог .txt
+          Скачать текущий фильтр .txt
+        </button>
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => setImportLogFilter("all")}
+          className={`rounded-full px-4 py-2 text-sm ${
+            importLogFilter === "all"
+              ? "bg-neutral-900 text-white"
+              : "bg-white text-neutral-700"
+          }`}
+        >
+          All ({importLogs.length})
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setImportLogFilter("success")}
+          className={`rounded-full px-4 py-2 text-sm ${
+            importLogFilter === "success"
+              ? "bg-neutral-900 text-white"
+              : "bg-white text-neutral-700"
+          }`}
+        >
+          Success ({importSuccessCount})
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setImportLogFilter("fail")}
+          className={`rounded-full px-4 py-2 text-sm ${
+            importLogFilter === "fail"
+              ? "bg-neutral-900 text-white"
+              : "bg-white text-neutral-700"
+          }`}
+        >
+          Fail ({importFailCount})
         </button>
       </div>
 
@@ -758,7 +854,7 @@ async function deleteArticle(sectionName: string, articleName: string) {
           </thead>
 
           <tbody>
-            {importLogs.map((log) => (
+            {filteredImportLogs.map((log) => (
               <tr
                 key={`${log.rowNumber}-${log.section}-${log.article}-${log.productKey}`}
                 className="border-t border-neutral-100"
@@ -817,6 +913,14 @@ async function deleteArticle(sectionName: string, articleName: string) {
   {autoTagStatus && (
     <div className="mt-4 rounded-xl bg-neutral-100 px-4 py-3 text-sm text-neutral-700">
       {autoTagStatus}
+    </div>
+  )}
+
+  {autoTagLogs.length > 0 && (
+    <div className="mt-4 max-h-72 overflow-auto rounded-xl border border-neutral-200 bg-neutral-50 p-3 text-xs text-neutral-600">
+      {autoTagLogs.slice(-120).map((line, index) => (
+        <div key={`${index}-${line}`}>{line}</div>
+      ))}
     </div>
   )}
 </section>
@@ -1213,10 +1317,17 @@ async function deleteArticle(sectionName: string, articleName: string) {
           <h2 className="text-2xl font-semibold">Массовое назначение тегов</h2>
 
           <p className="mt-2 text-sm text-neutral-500">
-            Выбери изделия в таблицах ниже, затем добавь или удали существующий тег.
+            Найди изделия, открой нужный раздел и отметь позиции чекбоксами.
           </p>
 
-          <div className="mt-5 grid gap-4 md:grid-cols-[2fr_1fr_1fr_1fr]">
+          <div className="mt-5 grid gap-4 md:grid-cols-[2fr_1fr_1fr]">
+            <input
+              className="rounded-xl border border-neutral-300 bg-white px-4 py-3 outline-none"
+              placeholder="Поиск: раздел, артикул, productKey, название..."
+              value={bulkQuery}
+              onChange={(e) => setBulkQuery(e.target.value)}
+            />
+
             <select
               className="rounded-xl border border-neutral-300 bg-white px-4 py-3 outline-none"
               value={bulkTagId}
@@ -1230,6 +1341,16 @@ async function deleteArticle(sectionName: string, articleName: string) {
               ))}
             </select>
 
+            <button
+              type="button"
+              onClick={selectAllFilteredProducts}
+              className="rounded-xl border border-neutral-300 px-4 py-3 text-neutral-700"
+            >
+              Выбрать найденные
+            </button>
+          </div>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
             <button
               type="button"
               onClick={() => updateSelectedTags("add")}
@@ -1248,16 +1369,6 @@ async function deleteArticle(sectionName: string, articleName: string) {
 
             <button
               type="button"
-              onClick={selectAllFilteredProducts}
-              className="rounded-xl border border-neutral-300 px-4 py-3 text-neutral-700"
-            >
-              Выбрать всё в текущем списке
-            </button>
-          </div>
-
-          <div className="mt-3">
-            <button
-              type="button"
               onClick={() => setSelectedProducts({})}
               className="rounded-xl border border-neutral-300 px-4 py-3 text-neutral-700"
             >
@@ -1266,7 +1377,8 @@ async function deleteArticle(sectionName: string, articleName: string) {
           </div>
 
           <div className="mt-4 text-sm text-neutral-500">
-            Выбрано изделий: {selectedProductList.length}
+            Выбрано изделий: {selectedProductList.length}. Найдено:{" "}
+            {filteredBulkProducts.length}.
           </div>
 
           {selectedProductList.length > 0 && (
@@ -1280,69 +1392,100 @@ async function deleteArticle(sectionName: string, articleName: string) {
                   )}
                   className="rounded-full bg-neutral-100 px-3 py-1 text-xs"
                 >
-                  {item.title} · {item.productKey.replaceAll("-", ".")}
+                  {item.title}
+                  {item.productKey && ` · ${item.productKey.replaceAll("-", ".")}`}
                 </span>
               ))}
             </div>
           )}
 
-          <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-3 lg:grid-cols-4">
-            {filteredProductList.map((item) => {
-              const key = getSelectionKey(
-                item.section,
-                item.article,
-                item.productKey
-              );
-              const selected = !!selectedProducts[key];
-              const previewUrl = item.image
-                ? `/api/preview?section=${encodeURIComponent(
-                    item.section
-                  )}&article=${encodeURIComponent(
-                    item.article
-                  )}&file=${encodeURIComponent(item.image)}`
-                : "";
+          <div className="mt-5 space-y-3">
+            {groupedBulkProducts.map(([sectionName, items]) => {
+              const sectionOpen =
+                !!openBulkSections[sectionName] || !!normalizedBulkQuery;
 
               return (
-                <label
-                  key={key}
-                  className={`relative cursor-pointer rounded-xl border p-3 ${
-                    selected
-                      ? "border-neutral-900 bg-neutral-50"
-                      : "border-neutral-200 bg-white"
-                  }`}
+                <section
+                  key={sectionName}
+                  className="rounded-xl border border-neutral-200 bg-white"
                 >
-                  <input
-                    type="checkbox"
-                    checked={selected}
-                    onChange={() =>
-                      toggleProductSelection(item.section, {
-                        article: item.article,
-                        productKey: item.productKey,
-                        title: item.title,
-                        images: item.image ? [item.image] : [],
-                      })
-                    }
-                    className="absolute right-3 top-3 h-5 w-5"
-                  />
+                  <button
+                    type="button"
+                    onClick={() => toggleBulkSection(sectionName)}
+                    className="flex w-full items-center justify-between px-4 py-3 text-left"
+                  >
+                    <span className="font-medium">
+                      {sectionOpen ? "▾" : "▸"} {sectionName}
+                    </span>
+                    <span className="text-sm text-neutral-500">
+                      {items.length}
+                    </span>
+                  </button>
 
-                  <div className="flex h-36 items-center justify-center rounded-lg bg-white">
-                    {previewUrl && (
-                      <img
-                        src={previewUrl}
-                        alt={item.title}
-                        loading="lazy"
-                        decoding="async"
-                        className="h-full w-full object-contain"
-                      />
-                    )}
-                  </div>
+                  {sectionOpen && (
+                    <div className="grid grid-cols-1 gap-3 border-t border-neutral-100 p-3 md:grid-cols-2 lg:grid-cols-3">
+                      {items.map((item) => {
+                        const key = getSelectionKey(
+                          item.section,
+                          item.article,
+                          item.productKey
+                        );
+                        const selected = !!selectedProducts[key];
+                        const previewUrl = item.image
+                          ? `/api/preview?section=${encodeURIComponent(
+                              item.section
+                            )}&article=${encodeURIComponent(
+                              item.article
+                            )}&file=${encodeURIComponent(item.image)}`
+                          : "";
 
-                  <div className="mt-3 font-medium">{item.title}</div>
-                  <div className="mt-1 text-xs text-neutral-500">
-                    {item.section} · {item.article} ·{" "}
-                    {item.productKey.replaceAll("-", ".")}
-                  </div>
-                </label>
+                        return (
+                          <label
+                            key={key}
+                            className={`relative cursor-pointer rounded-xl border p-3 ${
+                              selected
+                                ? "border-neutral-900 bg-neutral-50"
+                                : "border-neutral-200 bg-white"
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selected}
+                              onChange={() =>
+                                toggleProductSelection(item.section, {
+                                  article: item.article,
+                                  productKey: item.productKey,
+                                  title: item.title,
+                                  images: item.image ? [item.image] : [],
+                                })
+                              }
+                              className="absolute right-3 top-3 h-5 w-5"
+                            />
+
+                            <div className="flex h-28 items-center justify-center rounded-lg bg-white">
+                              {previewUrl && (
+                                <img
+                                  src={previewUrl}
+                                  alt={item.title}
+                                  loading="lazy"
+                                  decoding="async"
+                                  className="h-full w-full object-contain"
+                                />
+                              )}
+                            </div>
+
+                            <div className="mt-3 font-medium">{item.title}</div>
+                            <div className="mt-1 text-xs text-neutral-500">
+                              {item.article}
+                              {item.productKey &&
+                                ` · ${item.productKey.replaceAll("-", ".")}`}
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                </section>
               );
             })}
           </div>
@@ -1415,26 +1558,22 @@ async function deleteArticle(sectionName: string, articleName: string) {
                   className="border-t border-neutral-200"
                 >
                   <td className="p-3">
-                    {article.productKey ? (
-                      <input
-                        type="checkbox"
-                        checked={
-                          !!selectedProducts[
-                            getSelectionKey(
-                              section.section,
-                              article.article,
-                              article.productKey
-                            )
-                          ]
-                        }
-                        onChange={() =>
-                          toggleProductSelection(section.section, article)
-                        }
-                        className="h-4 w-4"
-                      />
-                    ) : (
-                      <span className="text-xs text-neutral-400">-</span>
-                    )}
+                    <input
+                      type="checkbox"
+                      checked={
+                        !!selectedProducts[
+                          getSelectionKey(
+                            section.section,
+                            article.article,
+                            article.productKey || ""
+                          )
+                        ]
+                      }
+                      onChange={() =>
+                        toggleProductSelection(section.section, article)
+                      }
+                      className="h-4 w-4"
+                    />
                   </td>
 
                   <td className="p-3 font-medium">

@@ -136,6 +136,7 @@ async function getOrCreateTag(name: string) {
 export async function POST() {
   let linked = 0;
   let created = 0;
+  const logs: string[] = [];
   const rules = await loadAutoTagRules();
 
   if (!fs.existsSync(ROOT)) {
@@ -144,6 +145,7 @@ export async function POST() {
       created,
       linked,
       message: "Catalog root not found",
+      logs: ["Catalog root not found"],
     });
   }
 
@@ -206,6 +208,7 @@ export async function POST() {
           });
 
           linked++;
+          logs.push(`${section}/${folderArticle}/${parsed.productKey} → ${tag.name}`);
         }
       }
     }
@@ -215,5 +218,6 @@ export async function POST() {
     ok: true,
     created,
     linked,
+    logs,
   });
 }

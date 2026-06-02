@@ -44,9 +44,9 @@ export async function POST(req: NextRequest) {
     const article = clean(item.article);
     const productKey = clean(item.productKey);
 
-    if (!section || !article || !productKey) {
+    if (!section || !article) {
       skipped++;
-      errors.push(`Пропущено: нет section/article/productKey`);
+      errors.push(`Пропущено: нет section/article`);
       continue;
     }
 

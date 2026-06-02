@@ -1,7 +1,7 @@
 type PrintProductCardProps = {
   section: string;
   article: string;
-  productKey: string;
+  productKey?: string;
   title: string;
   previewUrl: string;
 };
@@ -30,9 +30,11 @@ export default function PrintProductCard({
       <div className="mt-3 text-sm text-neutral-500">{section}</div>
       <h2 className="mt-1 text-lg font-semibold">{title}</h2>
       <div className="mt-1 text-sm text-neutral-600">Артикул: {article}</div>
-      <div className="mt-1 text-xs text-neutral-500">
-        Изделие: {productKey.replaceAll("-", ".")}
-      </div>
+      {productKey && (
+        <div className="mt-1 text-xs text-neutral-500">
+          Изделие: {productKey.replaceAll("-", ".")}
+        </div>
+      )}
     </article>
   );
 }

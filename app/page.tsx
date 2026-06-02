@@ -48,6 +48,7 @@ export default function Home() {
   const [articleTags, setArticleTags] = useState<ArticleTag[]>([]);
   const [query, setQuery] = useState("");
   const [activeTagIds, setActiveTagIds] = useState<string[]>([]);
+  const [filtersPinned, setFiltersPinned] = useState(true);
 
   useEffect(() => {
     fetch("/api/catalog")
@@ -120,6 +121,11 @@ export default function Home() {
     });
 
   const isFiltering = query.trim().length > 0 || activeTagIds.length > 0;
+  const pdfParams = new URLSearchParams();
+  if (query.trim()) pdfParams.set("q", query.trim());
+  if (activeTagIds.length > 0) {
+    pdfParams.set("tagIds", activeTagIds.join(","));
+  }
 
   return (
     <main className="min-h-screen bg-neutral-100 p-8 text-neutral-900">
@@ -134,9 +140,24 @@ export default function Home() {
           </Link>
         </header>
 
-        <div className="sticky top-4 z-20 mb-8 rounded-2xl bg-neutral-100/95 p-3 shadow-sm backdrop-blur">
+        <div
+          className={`${
+            filtersPinned ? "sticky top-4 z-20" : "relative"
+          } mb-8 rounded-2xl bg-neutral-100/95 p-3 shadow-sm backdrop-blur`}
+        >
+          {filtersPinned && (
+            <button
+              type="button"
+              onClick={() => setFiltersPinned(false)}
+              aria-label="Открепить фильтры"
+              className="absolute right-2 top-2 rounded-full bg-white px-2 py-1 text-sm text-neutral-500 shadow-sm"
+            >
+              ×
+            </button>
+          )}
+
           <input
-            className="mb-4 w-full rounded-xl border border-neutral-300 bg-white px-4 py-3 outline-none"
+            className="mb-4 w-full rounded-xl border border-neutral-300 bg-white px-4 py-3 pr-10 outline-none"
             placeholder="Глобальный поиск по артикулу..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -172,6 +193,17 @@ export default function Home() {
                   </button>
                 );
               })}
+            </div>
+          )}
+
+          {isFiltering && (
+            <div className="mt-3">
+              <a
+                href={`/api/pdf/catalog?${pdfParams.toString()}`}
+                className="inline-block rounded-full bg-neutral-900 px-4 py-2 text-sm text-white"
+              >
+                Скачать PDF
+              </a>
             </div>
           )}
         </div>
@@ -215,18 +247,17 @@ export default function Home() {
                     }`}
                     className="relative rounded-2xl bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
                   >
-                    {item.productKey && (
-                      <FavoriteButton
-                        item={{
-                          section: item.section,
-                          article: item.article,
-                          productKey: item.productKey,
-                          title: item.title || item.article,
-                          previewUrl,
-                        }}
-                        className="absolute right-3 top-3 z-10"
-                      />
-                    )}
+                    <FavoriteButton
+                      item={{
+                        section: item.section,
+                        article: item.article,
+                        productKey: item.productKey || "",
+                        title: item.title || item.article,
+                        previewUrl,
+                      }}
+                      iconOnly
+                      className="absolute right-3 top-3 z-10 flex h-10 w-10 items-center justify-center p-0"
+                    />
 
                     <Link
                       href={
