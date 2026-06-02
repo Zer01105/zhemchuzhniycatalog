@@ -134,45 +134,47 @@ export default function Home() {
           </Link>
         </header>
 
-        <input
-          className="mb-4 w-full rounded-xl border border-neutral-300 bg-white px-4 py-3 outline-none"
-          placeholder="Глобальный поиск по артикулу..."
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
+        <div className="sticky top-4 z-20 mb-8 rounded-2xl bg-neutral-100/95 p-3 shadow-sm backdrop-blur">
+          <input
+            className="mb-4 w-full rounded-xl border border-neutral-300 bg-white px-4 py-3 outline-none"
+            placeholder="Глобальный поиск по артикулу..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
 
-        {tags.length > 0 && (
-          <div className="mb-8 flex flex-wrap gap-2">
-            <button
-              onClick={() => setActiveTagIds([])}
-              className={`rounded-full px-4 py-2 text-sm ${
-                activeTagIds.length === 0
-                  ? "bg-neutral-900 text-white"
-                  : "bg-white text-neutral-700"
-              }`}
-            >
-              Все
-            </button>
+          {tags.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setActiveTagIds([])}
+                className={`rounded-full px-4 py-2 text-sm ${
+                  activeTagIds.length === 0
+                    ? "bg-neutral-900 text-white"
+                    : "bg-white text-neutral-700"
+                }`}
+              >
+                Все
+              </button>
 
-            {tags.map((tag) => {
-              const active = activeTagIds.includes(tag.id);
+              {tags.map((tag) => {
+                const active = activeTagIds.includes(tag.id);
 
-              return (
-                <button
-                  key={tag.id}
-                  onClick={() => toggleTag(tag.id)}
-                  className={`rounded-full px-4 py-2 text-sm ${
-                    active
-                      ? "bg-neutral-900 text-white"
-                      : "bg-white text-neutral-700"
-                  }`}
-                >
-                  {tag.name}
-                </button>
-              );
-            })}
-          </div>
-        )}
+                return (
+                  <button
+                    key={tag.id}
+                    onClick={() => toggleTag(tag.id)}
+                    className={`rounded-full px-4 py-2 text-sm ${
+                      active
+                        ? "bg-neutral-900 text-white"
+                        : "bg-white text-neutral-700"
+                    }`}
+                  >
+                    {tag.name}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
 
         {!isFiltering ? (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3 lg:grid-cols-4">
@@ -211,8 +213,21 @@ export default function Home() {
                     key={`${item.section}-${item.article}-${
                       item.productKey || item.article
                     }`}
-                    className="rounded-2xl bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
+                    className="relative rounded-2xl bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
                   >
+                    {item.productKey && (
+                      <FavoriteButton
+                        item={{
+                          section: item.section,
+                          article: item.article,
+                          productKey: item.productKey,
+                          title: item.title || item.article,
+                          previewUrl,
+                        }}
+                        className="absolute right-3 top-3 z-10"
+                      />
+                    )}
+
                     <Link
                       href={
                         item.productKey
@@ -251,18 +266,6 @@ export default function Home() {
                       </div>
                     </Link>
 
-                    {item.productKey && (
-                      <FavoriteButton
-                        item={{
-                          section: item.section,
-                          article: item.article,
-                          productKey: item.productKey,
-                          title: item.title || item.article,
-                          previewUrl,
-                        }}
-                        className="mt-4 w-full"
-                      />
-                    )}
                   </div>
                 );
               })}

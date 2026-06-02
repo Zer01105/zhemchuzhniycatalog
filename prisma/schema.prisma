@@ -79,3 +79,14 @@ model ProductSetItem {
 
   @@unique([setKey, section, article, productKey])
 }
+
+model AutoTagRule {
+  id         String   @id @default(cuid())
+  name       String
+  matchType  String
+  matchValue String
+  tagName    String
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}

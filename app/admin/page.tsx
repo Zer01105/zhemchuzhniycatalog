@@ -47,6 +47,16 @@ type SelectedProduct = {
   title: string;
 };
 
+type AutoTagRule = {
+  id: string;
+  name: string;
+  matchType: string;
+  matchValue: string;
+  tagName: string;
+  isActive: boolean;
+  createdAt: string;
+};
+
 
 export default function AdminPage() {
   const [tags, setTags] = useState<Tag[]>([]);
@@ -76,6 +86,15 @@ const [importFile, setImportFile] = useState<File | null>(null);
 const [importStatus, setImportStatus] = useState("");
 const [autoTagStatus, setAutoTagStatus] = useState("");
 const [isSyncingAutoTags, setIsSyncingAutoTags] = useState(false);
+const [previewStatus, setPreviewStatus] = useState("");
+const [previewLogs, setPreviewLogs] = useState<string[]>([]);
+const [isGeneratingPreviews, setIsGeneratingPreviews] = useState(false);
+const [autoTagRules, setAutoTagRules] = useState<AutoTagRule[]>([]);
+const [ruleName, setRuleName] = useState("");
+const [ruleMatchType, setRuleMatchType] = useState("first_digit");
+const [ruleMatchValue, setRuleMatchValue] = useState("");
+const [ruleTagName, setRuleTagName] = useState("");
+const [ruleStatus, setRuleStatus] = useState("");
 const [isImporting, setIsImporting] = useState(false);
 const [importLogs, setImportLogs] = useState<ImportLog[]>([]);
 const [selectedProducts, setSelectedProducts] = useState<
@@ -83,6 +102,7 @@ const [selectedProducts, setSelectedProducts] = useState<
 >({});
 const [bulkTagId, setBulkTagId] = useState("");
 const [bulkStatus, setBulkStatus] = useState("");
+const [bulkErrors, setBulkErrors] = useState<string[]>([]);
   async function loadCatalog() {
     const res = await fetch("/api/catalog");
     const data = await res.json();
@@ -97,6 +117,11 @@ async function loadTags() {
   const res = await fetch("/api/admin/tags");
   const data = await res.json();
   setTags(data);
+}
+async function loadAutoTagRules() {
+  const res = await fetch("/api/admin/auto-tag-rules");
+  const data = await res.json();
+  setAutoTagRules(data);
 }
 
 async function createTag(e: React.FormEvent) {
@@ -127,6 +152,78 @@ async function createTag(e: React.FormEvent) {
   setTagStatus(`Тег создан: ${data.tag.name}`);
   setTagName("");
   await loadTags();
+}
+async function createAutoTagRule(e: React.FormEvent) {
+  e.preventDefault();
+
+  if (!ruleMatchValue.trim() || !ruleTagName.trim()) {
+    setRuleStatus("Укажи условие и тег.");
+    return;
+  }
+
+  const res = await fetch("/api/admin/auto-tag-rules", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      name: ruleName.trim(),
+      matchType: ruleMatchType,
+      matchValue: ruleMatchValue.trim(),
+      tagName: ruleTagName.trim(),
+      isActive: true,
+    }),
+  });
+
+  const data = await res.json();
+
+  if (!res.ok) {
+    setRuleStatus(data.error || "Ошибка создания правила.");
+    return;
+  }
+
+  setRuleStatus("Правило создано.");
+  setRuleName("");
+  setRuleMatchValue("");
+  setRuleTagName("");
+  await loadAutoTagRules();
+}
+
+async function toggleAutoTagRule(rule: AutoTagRule) {
+  const res = await fetch("/api/admin/auto-tag-rules", {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      id: rule.id,
+      isActive: !rule.isActive,
+    }),
+  });
+
+  if (res.ok) {
+    await loadAutoTagRules();
+  }
+}
+
+async function deleteAutoTagRule(rule: AutoTagRule) {
+  const ok = confirm(`Удалить правило "${rule.name}"?`);
+
+  if (!ok) return;
+
+  const res = await fetch("/api/admin/auto-tag-rules", {
+    method: "DELETE",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      id: rule.id,
+    }),
+  });
+
+  if (res.ok) {
+    await loadAutoTagRules();
+  }
 }
 function toggleSection(sectionName: string) {
   setOpenSections((current) => ({
@@ -246,10 +343,12 @@ async function updateSelectedTags(action: "add" | "remove") {
 
   if (!bulkTagId || items.length === 0) {
     setBulkStatus("Выбери изделия и тег.");
+    setBulkErrors([]);
     return;
   }
 
   setBulkStatus("Обновление тегов...");
+  setBulkErrors([]);
 
   const res = await fetch("/api/admin/bulk-article-tags", {
     method: "POST",
@@ -267,12 +366,14 @@ async function updateSelectedTags(action: "add" | "remove") {
 
   if (!res.ok) {
     setBulkStatus(data.error || "Ошибка массового обновления тегов.");
+    setBulkErrors(data.errors || []);
     return;
   }
 
   setBulkStatus(
-    `Готово. Обработано: ${data.processed}, пропущено: ${data.skipped}.`
+    `Готово. Обновлено: ${data.processed}, пропущено: ${data.skipped}.`
   );
+  setBulkErrors(data.errors || []);
   await loadCatalog();
 }
 async function deleteTag(tag: Tag) {
@@ -369,6 +470,28 @@ async function syncProductTypeTags() {
   await loadTags();
   await loadCatalog();
 }
+async function generatePreviews() {
+  setIsGeneratingPreviews(true);
+  setPreviewStatus("Генерация превью...");
+  setPreviewLogs([]);
+
+  const res = await fetch("/api/admin/generate-previews", {
+    method: "POST",
+  });
+
+  const data = await res.json();
+
+  if (!res.ok || !data.ok) {
+    setPreviewStatus(data.error || "Ошибка генерации превью.");
+    setPreviewLogs(data.logs || []);
+    setIsGeneratingPreviews(false);
+    return;
+  }
+
+  setPreviewStatus("Генерация превью завершена.");
+  setPreviewLogs(data.logs || []);
+  setIsGeneratingPreviews(false);
+}
 async function deleteClient(user: ClientUser) {
   const ok = confirm(`Удалить клиента ${user.login}? Это действие нельзя отменить.`);
 
@@ -387,6 +510,7 @@ useEffect(() => {
   loadCatalog();
   loadClients();
   loadTags();
+  loadAutoTagRules();
 }, []);
 
   const totalArticles = useMemo(
@@ -420,6 +544,34 @@ useEffect(() => {
   }));
 
   const selectedProductList = Object.values(selectedProducts);
+  const filteredProductList = filteredCatalog.flatMap((section) =>
+    section.articles
+      .filter((article) => article.productKey)
+      .map((article) => ({
+        section: section.section,
+        article: article.article,
+        productKey: article.productKey!,
+        title: article.title || article.article,
+        image: article.images[0] || "",
+      }))
+  );
+
+  function selectAllFilteredProducts() {
+    setSelectedProducts((current) => {
+      const next = { ...current };
+
+      for (const item of filteredProductList) {
+        next[getSelectionKey(item.section, item.article, item.productKey)] = {
+          section: item.section,
+          article: item.article,
+          productKey: item.productKey,
+          title: item.title,
+        };
+      }
+
+      return next;
+    });
+  }
 async function clearAllCatalogData() {
   const ok = confirm(
     "Удалить ВСЕ теги и ВСЕ характеристики у всех артикулов?"
@@ -665,6 +817,146 @@ async function deleteArticle(sectionName: string, articleName: string) {
   {autoTagStatus && (
     <div className="mt-4 rounded-xl bg-neutral-100 px-4 py-3 text-sm text-neutral-700">
       {autoTagStatus}
+    </div>
+  )}
+</section>
+<section className="mb-8 rounded-2xl bg-white p-5 shadow-sm border border-blue-200">
+  <h2 className="text-2xl font-semibold text-blue-700">
+    Конструктор автотегов
+  </h2>
+
+  <p className="mt-2 text-sm text-neutral-500">
+    Создай дополнительные правила. Базовые правила 1–4 сохраняются всегда.
+  </p>
+
+  <form onSubmit={createAutoTagRule} className="mt-5 grid gap-4 md:grid-cols-5">
+    <input
+      className="rounded-xl border border-neutral-300 px-4 py-3 outline-none"
+      placeholder="Название правила"
+      value={ruleName}
+      onChange={(e) => setRuleName(e.target.value)}
+    />
+
+    <select
+      className="rounded-xl border border-neutral-300 bg-white px-4 py-3 outline-none"
+      value={ruleMatchType}
+      onChange={(e) => setRuleMatchType(e.target.value)}
+    >
+      <option value="first_digit">Первая цифра</option>
+      <option value="last_letter">Последняя буква</option>
+    </select>
+
+    <input
+      className="rounded-xl border border-neutral-300 px-4 py-3 outline-none"
+      placeholder="5, d или *"
+      value={ruleMatchValue}
+      onChange={(e) => setRuleMatchValue(e.target.value)}
+    />
+
+    <input
+      className="rounded-xl border border-neutral-300 px-4 py-3 outline-none"
+      placeholder="Например: Браслет"
+      value={ruleTagName}
+      onChange={(e) => setRuleTagName(e.target.value)}
+    />
+
+    <button className="rounded-xl bg-neutral-900 px-4 py-3 text-white">
+      Создать правило
+    </button>
+  </form>
+
+  {ruleStatus && (
+    <div className="mt-4 rounded-xl bg-neutral-100 px-4 py-3 text-sm text-neutral-700">
+      {ruleStatus}
+    </div>
+  )}
+
+  <div className="mt-5 overflow-hidden rounded-xl border border-neutral-200">
+    <table className="w-full text-left text-sm">
+      <thead className="bg-neutral-50 text-neutral-500">
+        <tr>
+          <th className="p-3">Правило</th>
+          <th className="p-3">Условие</th>
+          <th className="p-3">Тег</th>
+          <th className="p-3">Статус</th>
+          <th className="p-3">Действия</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        {autoTagRules.map((rule) => (
+          <tr key={rule.id} className="border-t border-neutral-200">
+            <td className="p-3 font-medium">{rule.name}</td>
+            <td className="p-3 text-neutral-500">
+              {rule.matchType === "first_digit"
+                ? "Первая цифра"
+                : "Последняя буква"}{" "}
+              = {rule.matchValue}
+            </td>
+            <td className="p-3">{rule.tagName}</td>
+            <td className="p-3">
+              {rule.isActive ? "Включено" : "Выключено"}
+            </td>
+            <td className="flex gap-3 p-3">
+              <button
+                type="button"
+                onClick={() => toggleAutoTagRule(rule)}
+                className="underline"
+              >
+                {rule.isActive ? "Выключить" : "Включить"}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => deleteAutoTagRule(rule)}
+                className="text-red-600 underline"
+              >
+                Удалить
+              </button>
+            </td>
+          </tr>
+        ))}
+
+        {autoTagRules.length === 0 && (
+          <tr>
+            <td colSpan={5} className="p-3 text-neutral-500">
+              Дополнительных правил пока нет.
+            </td>
+          </tr>
+        )}
+      </tbody>
+    </table>
+  </div>
+</section>
+<section className="mb-8 rounded-2xl bg-white p-5 shadow-sm border border-emerald-200">
+  <h2 className="text-2xl font-semibold text-emerald-700">
+    Превью
+  </h2>
+
+  <p className="mt-2 text-sm text-neutral-500">
+    Генерирует недостающие превью для фото каталога. Уже готовые превью не перезаписываются.
+  </p>
+
+  <button
+    type="button"
+    onClick={generatePreviews}
+    disabled={isGeneratingPreviews}
+    className="mt-4 rounded-xl bg-emerald-700 px-4 py-3 text-white disabled:opacity-50"
+  >
+    {isGeneratingPreviews ? "Генерация..." : "Сгенерировать превью"}
+  </button>
+
+  {previewStatus && (
+    <div className="mt-4 rounded-xl bg-neutral-100 px-4 py-3 text-sm text-neutral-700">
+      {previewStatus}
+    </div>
+  )}
+
+  {previewLogs.length > 0 && (
+    <div className="mt-4 max-h-72 overflow-auto rounded-xl border border-neutral-200 bg-neutral-50 p-3 text-xs text-neutral-600">
+      {previewLogs.slice(-80).map((line, index) => (
+        <div key={`${index}-${line}`}>{line}</div>
+      ))}
     </div>
   )}
 </section>
@@ -956,6 +1248,16 @@ async function deleteArticle(sectionName: string, articleName: string) {
 
             <button
               type="button"
+              onClick={selectAllFilteredProducts}
+              className="rounded-xl border border-neutral-300 px-4 py-3 text-neutral-700"
+            >
+              Выбрать всё в текущем списке
+            </button>
+          </div>
+
+          <div className="mt-3">
+            <button
+              type="button"
               onClick={() => setSelectedProducts({})}
               className="rounded-xl border border-neutral-300 px-4 py-3 text-neutral-700"
             >
@@ -984,9 +1286,78 @@ async function deleteArticle(sectionName: string, articleName: string) {
             </div>
           )}
 
+          <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-3 lg:grid-cols-4">
+            {filteredProductList.map((item) => {
+              const key = getSelectionKey(
+                item.section,
+                item.article,
+                item.productKey
+              );
+              const selected = !!selectedProducts[key];
+              const previewUrl = item.image
+                ? `/api/preview?section=${encodeURIComponent(
+                    item.section
+                  )}&article=${encodeURIComponent(
+                    item.article
+                  )}&file=${encodeURIComponent(item.image)}`
+                : "";
+
+              return (
+                <label
+                  key={key}
+                  className={`relative cursor-pointer rounded-xl border p-3 ${
+                    selected
+                      ? "border-neutral-900 bg-neutral-50"
+                      : "border-neutral-200 bg-white"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selected}
+                    onChange={() =>
+                      toggleProductSelection(item.section, {
+                        article: item.article,
+                        productKey: item.productKey,
+                        title: item.title,
+                        images: item.image ? [item.image] : [],
+                      })
+                    }
+                    className="absolute right-3 top-3 h-5 w-5"
+                  />
+
+                  <div className="flex h-36 items-center justify-center rounded-lg bg-white">
+                    {previewUrl && (
+                      <img
+                        src={previewUrl}
+                        alt={item.title}
+                        loading="lazy"
+                        decoding="async"
+                        className="h-full w-full object-contain"
+                      />
+                    )}
+                  </div>
+
+                  <div className="mt-3 font-medium">{item.title}</div>
+                  <div className="mt-1 text-xs text-neutral-500">
+                    {item.section} · {item.article} ·{" "}
+                    {item.productKey.replaceAll("-", ".")}
+                  </div>
+                </label>
+              );
+            })}
+          </div>
+
           {bulkStatus && (
             <div className="mt-4 rounded-xl bg-neutral-100 px-4 py-3 text-sm text-neutral-700">
               {bulkStatus}
+            </div>
+          )}
+
+          {bulkErrors.length > 0 && (
+            <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {bulkErrors.map((error) => (
+                <div key={error}>{error}</div>
+              ))}
             </div>
           )}
         </section>

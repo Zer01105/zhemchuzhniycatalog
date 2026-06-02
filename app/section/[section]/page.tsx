@@ -53,8 +53,21 @@ function ProductCard({
   return (
     <div
       key={`${article.article}-${article.productKey || article.article}`}
-      className="rounded-2xl bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
+      className="relative rounded-2xl bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
     >
+      {article.productKey && (
+        <FavoriteButton
+          item={{
+            section: sectionName,
+            article: article.article,
+            productKey: article.productKey,
+            title: article.title || article.article,
+            previewUrl,
+          }}
+          className="absolute right-3 top-3 z-10"
+        />
+      )}
+
       <Link
         href={
           article.productKey
@@ -87,18 +100,6 @@ function ProductCard({
         </div>
       </Link>
 
-      {article.productKey && (
-        <FavoriteButton
-          item={{
-            section: sectionName,
-            article: article.article,
-            productKey: article.productKey,
-            title: article.title || article.article,
-            previewUrl,
-          }}
-          className="mt-4 w-full"
-        />
-      )}
     </div>
   );
 }
@@ -192,6 +193,13 @@ const matchesTag =
       .entries()
   );
 
+  const printParams = new URLSearchParams();
+  printParams.set("section", sectionName);
+  if (query.trim()) printParams.set("q", query.trim());
+  if (activeTagIds.length > 0) {
+    printParams.set("tagIds", activeTagIds.join(","));
+  }
+
   return (
     <main className="min-h-screen bg-neutral-100 p-8 text-neutral-900">
       <div className="mx-auto max-w-7xl">
@@ -210,66 +218,75 @@ const matchesTag =
           </p>
         </header>
 
-        <input
-          className="mb-4 w-full rounded-xl border border-neutral-300 bg-white px-4 py-3 outline-none"
-          placeholder="Поиск по артикулу внутри раздела..."
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
+        <div className="sticky top-4 z-20 mb-8 rounded-2xl bg-neutral-100/95 p-3 shadow-sm backdrop-blur">
+          <input
+            className="mb-4 w-full rounded-xl border border-neutral-300 bg-white px-4 py-3 outline-none"
+            placeholder="Поиск по артикулу внутри раздела..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
 
-        <div className="mb-4 flex flex-wrap gap-2">
-          <button
-            onClick={() => setViewMode("products")}
-            className={`rounded-full px-4 py-2 text-sm ${
-              viewMode === "products"
-                ? "bg-neutral-900 text-white"
-                : "bg-white text-neutral-700"
-            }`}
-          >
-            По изделиям
-          </button>
+          <div className="mb-4 flex flex-wrap gap-2">
+            <button
+              onClick={() => setViewMode("products")}
+              className={`rounded-full px-4 py-2 text-sm ${
+                viewMode === "products"
+                  ? "bg-neutral-900 text-white"
+                  : "bg-white text-neutral-700"
+              }`}
+            >
+              По изделиям
+            </button>
 
-          <button
-            onClick={() => setViewMode("sets")}
-            className={`rounded-full px-4 py-2 text-sm ${
-              viewMode === "sets"
-                ? "bg-neutral-900 text-white"
-                : "bg-white text-neutral-700"
-            }`}
-          >
-            По комплектам
-          </button>
-        </div>
+            <button
+              onClick={() => setViewMode("sets")}
+              className={`rounded-full px-4 py-2 text-sm ${
+                viewMode === "sets"
+                  ? "bg-neutral-900 text-white"
+                  : "bg-white text-neutral-700"
+              }`}
+            >
+              По комплектам
+            </button>
 
-        <div className="mb-8 flex flex-wrap gap-2">
-          <button
-            onClick={() => setActiveTagIds([])}
-            className={`rounded-full px-4 py-2 text-sm ${
-              activeTagIds.length === 0
-                ? "bg-neutral-900 text-white"
-                : "bg-white text-neutral-700"
-            }`}
-          >
-            Все
-          </button>
+            <Link
+              href={`/print/catalog?${printParams.toString()}`}
+              className="rounded-full bg-white px-4 py-2 text-sm text-neutral-700"
+            >
+              Печать PDF
+            </Link>
+          </div>
 
-          {tags.map((tag) => {
-            const active = activeTagIds.includes(tag.id);
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setActiveTagIds([])}
+              className={`rounded-full px-4 py-2 text-sm ${
+                activeTagIds.length === 0
+                  ? "bg-neutral-900 text-white"
+                  : "bg-white text-neutral-700"
+              }`}
+            >
+              Все
+            </button>
 
-            return (
-              <button
-                key={tag.id}
-                onClick={() => toggleTag(tag.id)}
-                className={`rounded-full px-4 py-2 text-sm ${
-                  active
-                    ? "bg-neutral-900 text-white"
-                    : "bg-white text-neutral-700"
-                }`}
-              >
-                {tag.name}
-              </button>
-            );
-          })}
+            {tags.map((tag) => {
+              const active = activeTagIds.includes(tag.id);
+
+              return (
+                <button
+                  key={tag.id}
+                  onClick={() => toggleTag(tag.id)}
+                  className={`rounded-full px-4 py-2 text-sm ${
+                    active
+                      ? "bg-neutral-900 text-white"
+                      : "bg-white text-neutral-700"
+                  }`}
+                >
+                  {tag.name}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {viewMode === "products" ? (

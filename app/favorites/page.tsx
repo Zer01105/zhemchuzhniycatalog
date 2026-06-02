@@ -52,13 +52,22 @@ export default function FavoritesPage() {
           </div>
 
           {items.length > 0 && (
-            <button
-              type="button"
-              onClick={deleteAll}
-              className="rounded-xl bg-red-600 px-4 py-3 text-sm text-white"
-            >
-              Очистить всё избранное
-            </button>
+            <div className="flex flex-wrap gap-3">
+              <Link
+                href="/print/favorites"
+                className="rounded-xl bg-neutral-900 px-4 py-3 text-sm text-white"
+              >
+                Печать PDF
+              </Link>
+
+              <button
+                type="button"
+                onClick={deleteAll}
+                className="rounded-xl bg-red-600 px-4 py-3 text-sm text-white"
+              >
+                Очистить всё избранное
+              </button>
+            </div>
           )}
         </header>
 

@@ -61,6 +61,7 @@ function getProductSummary(section: string, article: string, productKey: string)
   const articlePath = path.join(ROOT, section, article);
 
   if (!fs.existsSync(articlePath)) return null;
+  if (!fs.statSync(articlePath).isDirectory()) return null;
 
   const productImages = fs
     .readdirSync(articlePath)
@@ -87,6 +88,105 @@ function getProductSummary(section: string, article: string, productKey: string)
   };
 }
 
+function readProductImages(section: string, article: string, productKey: string) {
+  const articlePath = path.join(ROOT, section, article);
+
+  if (!fs.existsSync(articlePath)) {
+    return {
+      articleExists: false,
+      parsedImages: [] as Array<{
+        file: string;
+        parsed: ReturnType<typeof parseJewelryFile>;
+      }>,
+    };
+  }
+
+  const stats = fs.statSync(articlePath);
+
+  if (!stats.isDirectory()) {
+    return {
+      articleExists: false,
+      parsedImages: [] as Array<{
+        file: string;
+        parsed: ReturnType<typeof parseJewelryFile>;
+      }>,
+    };
+  }
+
+  return {
+    articleExists: true,
+    parsedImages: fs
+      .readdirSync(articlePath)
+      .filter(isValidImage)
+      .map((file) => ({
+        file,
+        parsed: parseJewelryFile(file),
+      }))
+      .filter((item) => item.parsed?.productKey === productKey),
+  };
+}
+
+async function loadAttributes(
+  section: string,
+  article: string,
+  productKey: string
+) {
+  try {
+    const productAttributes = await prisma.articleAttribute.findMany({
+      where: {
+        section,
+        article,
+        productKey,
+      },
+      orderBy: {
+        sortOrder: "asc",
+      },
+    });
+
+    if (productAttributes.length > 0) {
+      return productAttributes;
+    }
+
+    return prisma.articleAttribute.findMany({
+      where: {
+        section,
+        article,
+        productKey: "",
+      },
+      orderBy: {
+        sortOrder: "asc",
+      },
+    });
+  } catch (error) {
+    console.error("Product attributes read error", error);
+    return [];
+  }
+}
+
+async function loadSetProducts(
+  section: string,
+  article: string,
+  productKey: string
+) {
+  try {
+    const setItems = await prisma.productSetItem.findMany({
+      where: {
+        setKey: buildSetKey(section, article, productKey),
+      },
+      orderBy: {
+        createdAt: "asc",
+      },
+    });
+
+    return setItems
+      .map((item) => getProductSummary(item.section, item.article, item.productKey))
+      .filter((item) => item !== null);
+  } catch (error) {
+    console.error("Product set read error", error);
+    return [];
+  }
+}
+
 export default async function ProductPage({ params }: Props) {
   const { section, article, productKey } = await params;
 
@@ -94,16 +194,11 @@ export default async function ProductPage({ params }: Props) {
   const decodedArticle = decodeURIComponent(article);
   const decodedProductKey = decodeURIComponent(productKey);
 
-  const articlePath = path.join(ROOT, decodedSection, decodedArticle);
-
-  const allImages = fs.readdirSync(articlePath).filter(isValidImage);
-
-  const parsedImages = allImages
-    .map((file) => ({
-      file,
-      parsed: parseJewelryFile(file),
-    }))
-    .filter((item) => item.parsed?.productKey === decodedProductKey);
+  const { articleExists, parsedImages } = readProductImages(
+    decodedSection,
+    decodedArticle,
+    decodedProductKey
+  );
 
   const images = parsedImages.map((item) => item.file);
   const parsed = parsedImages[0]?.parsed;
@@ -120,47 +215,16 @@ export default async function ProductPage({ params }: Props) {
       )}`
     : "";
 
-  const productAttributes = await prisma.articleAttribute.findMany({
-  where: {
-    section: decodedSection,
-    article: decodedArticle,
-    productKey: decodedProductKey,
-  },
-  orderBy: {
-    sortOrder: "asc",
-  },
-});
-
-const modelAttributes = await prisma.articleAttribute.findMany({
-  where: {
-    section: decodedSection,
-    article: decodedArticle,
-    productKey: "",
-  },
-  orderBy: {
-    sortOrder: "asc",
-  },
-});
-
-const attributes =
-  productAttributes.length > 0
-    ? productAttributes
-    : modelAttributes;
-
-const setItems = await prisma.productSetItem.findMany({
-  where: {
-    setKey: buildSetKey(decodedSection, decodedArticle, decodedProductKey),
-  },
-  orderBy: {
-    createdAt: "asc",
-  },
-});
-
-const setProducts = setItems
-  .map((item) =>
-    getProductSummary(item.section, item.article, item.productKey)
-  )
-  .filter((item) => item !== null);
+  const attributes = await loadAttributes(
+    decodedSection,
+    decodedArticle,
+    decodedProductKey
+  );
+  const setProducts = await loadSetProducts(
+    decodedSection,
+    decodedArticle,
+    decodedProductKey
+  );
 
   return (
     <main className="min-h-screen bg-neutral-100 p-8 text-neutral-900">
@@ -175,30 +239,40 @@ const setProducts = setItems
         <header className="mt-6 mb-8">
           <div className="text-sm text-neutral-500">{decodedSection}</div>
 
-          <h1 className="text-4xl font-semibold">
-            {title}
-          </h1>
+          <div className="relative pr-0 md:pr-56">
+            <h1 className="text-4xl font-semibold">{title}</h1>
+
+            {decodedProductKey ? (
+              <FavoriteButton
+                item={{
+                  section: decodedSection,
+                  article: decodedArticle,
+                  productKey: decodedProductKey,
+                  title,
+                  previewUrl,
+                }}
+                className="mt-4 md:absolute md:right-0 md:top-0 md:mt-0"
+              />
+            ) : null}
+          </div>
 
           <p className="mt-2 text-neutral-500">Фото: {images.length}</p>
-
-          <FavoriteButton
-            item={{
-              section: decodedSection,
-              article: decodedArticle,
-              productKey: decodedProductKey,
-              title,
-              previewUrl,
-            }}
-            className="mt-4"
-          />
         </header>
 
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-[2fr_1fr]">
-          <ProductGallery
-            section={decodedSection}
-            article={decodedArticle}
-            images={images}
-          />
+          {images.length > 0 ? (
+            <ProductGallery
+              section={decodedSection}
+              article={decodedArticle}
+              images={images}
+            />
+          ) : (
+            <section className="rounded-2xl bg-white p-5 text-neutral-500 shadow-sm">
+              {!articleExists
+                ? "Папка артикула не найдена."
+                : "Фото для этого изделия не найдены."}
+            </section>
+          )}
 
           <aside className="rounded-2xl bg-white p-5 shadow-sm">
             <h2 className="text-2xl font-semibold">Характеристики</h2>

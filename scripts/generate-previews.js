@@ -30,6 +30,11 @@ async function processFile(sourcePath, previewPath) {
 }
 
 async function walk(dir) {
+  if (!fs.existsSync(dir)) {
+    console.error("source root not found:", dir);
+    return;
+  }
+
   const entries = fs.readdirSync(dir, { withFileTypes: true });
 
   for (const entry of entries) {
@@ -46,7 +51,11 @@ async function walk(dir) {
     );
 
     if (entry.isDirectory()) {
-      await walk(sourcePath);
+      try {
+        await walk(sourcePath);
+      } catch (err) {
+        console.error("skip directory:", relativePath, err.message);
+      }
     } else if (entry.isFile() && IMAGE_RE.test(entry.name)) {
       console.log("preview:", relativePath);
       try {

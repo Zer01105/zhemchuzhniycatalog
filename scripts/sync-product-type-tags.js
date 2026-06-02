@@ -15,6 +15,13 @@ const PRODUCT_TYPES = {
   "4": "Брошь",
 };
 
+const DEFAULT_RULES = [
+  { matchType: "first_digit", matchValue: "1", tagName: "Кольцо" },
+  { matchType: "first_digit", matchValue: "2", tagName: "Серьги" },
+  { matchType: "first_digit", matchValue: "3", tagName: "Кулон" },
+  { matchType: "first_digit", matchValue: "4", tagName: "Брошь" },
+];
+
 function slugify(value) {
   return value
     .trim()
@@ -39,14 +46,16 @@ function parseJewelryFile(file) {
   const typeId = parts[0];
   const model = parts[1]?.padStart(4, "0");
   const pearlType = parts[3]?.toLowerCase();
+  const lastLetter = name.match(/[a-zа-яё]$/i)?.[0]?.toLowerCase() || "";
   const modification = parts.slice(2).join(".");
 
-  if (!PRODUCT_TYPES[typeId] || !model) return null;
+  if (!model) return null;
 
   return {
     typeId,
     productType: PRODUCT_TYPES[typeId],
     pearlType,
+    lastLetter,
     productKey: [typeId, model, modification || "base"].join("-"),
   };
 }
@@ -57,6 +66,53 @@ function getPearlTagName(pearlType) {
   if (pearlType === "d") return "Капля";
 
   return "Барочный";
+}
+
+async function loadAutoTagRules() {
+  try {
+    const rules = await prisma.autoTagRule.findMany({
+      where: {
+        isActive: true,
+      },
+      orderBy: {
+        createdAt: "asc",
+      },
+    });
+
+    return [
+      ...DEFAULT_RULES,
+      ...rules.map((rule) => ({
+        matchType: rule.matchType,
+        matchValue: rule.matchValue.toLowerCase(),
+        tagName: rule.tagName,
+      })),
+    ];
+  } catch (error) {
+    console.error("auto tag rules unavailable, using defaults:", error.message);
+    return DEFAULT_RULES;
+  }
+}
+
+function getRuleTagNames(parsed, rules) {
+  const tagNames = [];
+
+  for (const rule of rules) {
+    if (
+      rule.matchType === "first_digit" &&
+      parsed.typeId === rule.matchValue
+    ) {
+      tagNames.push(rule.tagName);
+    }
+
+    if (
+      rule.matchType === "last_letter" &&
+      (parsed.lastLetter === rule.matchValue || rule.matchValue === "*")
+    ) {
+      tagNames.push(rule.tagName);
+    }
+  }
+
+  return Array.from(new Set(tagNames));
 }
 
 async function getOrCreateTag(name) {
@@ -100,6 +156,13 @@ async function attachTag({ section, article, productKey, tagName }) {
 }
 
 async function main() {
+  const rules = await loadAutoTagRules();
+
+  if (!fs.existsSync(ROOT)) {
+    console.error("catalog root not found:", ROOT);
+    return;
+  }
+
   for (const section of fs.readdirSync(ROOT)) {
     if (!JEWELRY_SECTIONS.has(section)) continue;
 
@@ -121,12 +184,14 @@ async function main() {
       }
 
       for (const parsed of products.values()) {
-        await attachTag({
-          section,
-          article: folderArticle,
-          productKey: parsed.productKey,
-          tagName: parsed.productType,
-        });
+        for (const tagName of getRuleTagNames(parsed, rules)) {
+          await attachTag({
+            section,
+            article: folderArticle,
+            productKey: parsed.productKey,
+            tagName,
+          });
+        }
 
         const pearlTagName = getPearlTagName(parsed.pearlType);
 

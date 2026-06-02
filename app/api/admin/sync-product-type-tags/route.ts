@@ -14,6 +14,13 @@ const PRODUCT_TYPES: Record<string, string> = {
   "4": "Брошь",
 };
 
+const DEFAULT_RULES = [
+  { matchType: "first_digit", matchValue: "1", tagName: "Кольцо" },
+  { matchType: "first_digit", matchValue: "2", tagName: "Серьги" },
+  { matchType: "first_digit", matchValue: "3", tagName: "Кулон" },
+  { matchType: "first_digit", matchValue: "4", tagName: "Брошь" },
+];
+
 function slugify(value: string) {
   return value
     .trim()
@@ -37,14 +44,77 @@ function parseJewelryFile(file: string) {
 
   const typeId = parts[0];
   const model = parts[1]?.padStart(4, "0");
+  const pearlType = parts[3]?.toLowerCase();
+  const lastLetter = name.match(/[a-zа-яё]$/i)?.[0]?.toLowerCase() || "";
   const modification = parts.slice(2).join(".");
 
-  if (!PRODUCT_TYPES[typeId] || !model) return null;
+  if (!model) return null;
 
   return {
+    typeId,
     productType: PRODUCT_TYPES[typeId],
+    pearlType,
+    lastLetter,
     productKey: [typeId, model, modification || "base"].join("-"),
   };
+}
+
+function getPearlTagName(pearlType?: string) {
+  if (!pearlType) return null;
+  if (pearlType === "b") return null;
+  if (pearlType === "d") return "Капля";
+
+  return "Барочный";
+}
+
+async function loadAutoTagRules() {
+  try {
+    const rules = await prisma.autoTagRule.findMany({
+      where: {
+        isActive: true,
+      },
+      orderBy: {
+        createdAt: "asc",
+      },
+    });
+
+    return [
+      ...DEFAULT_RULES,
+      ...rules.map((rule) => ({
+        matchType: rule.matchType,
+        matchValue: rule.matchValue.toLowerCase(),
+        tagName: rule.tagName,
+      })),
+    ];
+  } catch (error) {
+    console.error("auto tag rules unavailable, using defaults:", error);
+    return DEFAULT_RULES;
+  }
+}
+
+function getRuleTagNames(
+  parsed: NonNullable<ReturnType<typeof parseJewelryFile>>,
+  rules: Array<{ matchType: string; matchValue: string; tagName: string }>
+) {
+  const tagNames: string[] = [];
+
+  for (const rule of rules) {
+    if (
+      rule.matchType === "first_digit" &&
+      parsed.typeId === rule.matchValue
+    ) {
+      tagNames.push(rule.tagName);
+    }
+
+    if (
+      rule.matchType === "last_letter" &&
+      (parsed.lastLetter === rule.matchValue || rule.matchValue === "*")
+    ) {
+      tagNames.push(rule.tagName);
+    }
+  }
+
+  return Array.from(new Set(tagNames));
 }
 
 async function getOrCreateTag(name: string) {
@@ -66,6 +136,16 @@ async function getOrCreateTag(name: string) {
 export async function POST() {
   let linked = 0;
   let created = 0;
+  const rules = await loadAutoTagRules();
+
+  if (!fs.existsSync(ROOT)) {
+    return NextResponse.json({
+      ok: true,
+      created,
+      linked,
+      message: "Catalog root not found",
+    });
+  }
 
   for (const section of fs.readdirSync(ROOT)) {
     if (!JEWELRY_SECTIONS.has(section)) continue;
@@ -78,43 +158,55 @@ export async function POST() {
       if (!fs.statSync(articlePath).isDirectory()) continue;
 
       const images = fs.readdirSync(articlePath).filter(isValidImage);
-      const productKeys = new Map<string, string>();
+      const products = new Map<
+        string,
+        NonNullable<ReturnType<typeof parseJewelryFile>>
+      >();
 
       for (const file of images) {
         const parsed = parseJewelryFile(file);
         if (!parsed) continue;
 
-        productKeys.set(parsed.productKey, parsed.productType);
+        products.set(parsed.productKey, parsed);
       }
 
-      for (const [productKey, productType] of productKeys.entries()) {
-        const before = await prisma.tag.findUnique({
-          where: { slug: slugify(productType) },
-        });
+      for (const parsed of products.values()) {
+        const tagNames = [
+          ...getRuleTagNames(parsed, rules),
+          ...(getPearlTagName(parsed.pearlType)
+            ? [getPearlTagName(parsed.pearlType)!]
+            : []),
+        ];
 
-        const tag = await getOrCreateTag(productType);
+        for (const tagName of Array.from(new Set(tagNames))) {
+          const before = await prisma.tag.findUnique({
+            where: { slug: slugify(tagName) },
+          });
 
-        if (!before) created++;
+          const tag = await getOrCreateTag(tagName);
 
-        await prisma.articleTag.upsert({
-          where: {
-            section_article_productKey_tagId: {
+          if (!before) created++;
+
+          await prisma.articleTag.upsert({
+            where: {
+              section_article_productKey_tagId: {
+                section,
+                article: folderArticle,
+                productKey: parsed.productKey,
+                tagId: tag.id,
+              },
+            },
+            update: {},
+            create: {
               section,
               article: folderArticle,
-              productKey,
+              productKey: parsed.productKey,
               tagId: tag.id,
             },
-          },
-          update: {},
-          create: {
-            section,
-            article: folderArticle,
-            productKey,
-            tagId: tag.id,
-          },
-        });
+          });
 
-        linked++;
+          linked++;
+        }
       }
     }
   }

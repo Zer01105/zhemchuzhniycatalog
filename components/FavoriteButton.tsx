@@ -72,7 +72,10 @@ export default function FavoriteButton({
     };
   }, [item]);
 
-  function toggleFavorite() {
+  function toggleFavorite(event?: React.MouseEvent<HTMLButtonElement>) {
+    event?.preventDefault();
+    event?.stopPropagation();
+
     const key = getFavoriteKey(item);
     const favorites = readFavorites();
 
@@ -88,13 +91,14 @@ export default function FavoriteButton({
     <button
       type="button"
       onClick={toggleFavorite}
-      className={`rounded-xl px-4 py-2 text-sm ${
+      aria-pressed={isFavorite}
+      className={`rounded-full px-4 py-2 text-sm font-medium shadow-sm transition ${
         isFavorite
-          ? "bg-neutral-200 text-neutral-900"
-          : "bg-neutral-900 text-white"
+          ? "bg-amber-400 text-neutral-950 ring-2 ring-amber-600"
+          : "bg-neutral-950 text-white hover:bg-neutral-700"
       } ${className}`}
     >
-      {isFavorite ? "В избранном" : "Добавить в избранное"}
+      {isFavorite ? "★ В избранном" : "☆ Избранное"}
     </button>
   );
 }
