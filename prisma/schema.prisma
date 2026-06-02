@@ -68,3 +68,14 @@ model ArticleAttribute {
 
   @@unique([section, article, productKey, name])
 }
+
+model ProductSetItem {
+  id         String   @id @default(cuid())
+  setKey     String
+  section    String
+  article    String
+  productKey String
+  createdAt  DateTime @default(now())
+
+  @@unique([setKey, section, article, productKey])
+}

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import FavoriteButton from "@/components/FavoriteButton";
 
 type Article = {
   article: string;
@@ -128,6 +129,9 @@ export default function Home() {
           <p className="mt-2 text-neutral-500">
             Выберите раздел или найдите артикул по всему каталогу.
           </p>
+          <Link href="/favorites" className="mt-3 inline-block text-sm text-neutral-500">
+            Избранное
+          </Link>
         </header>
 
         <input
@@ -193,53 +197,75 @@ export default function Home() {
             </h2>
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3 lg:grid-cols-4">
-              {searchResults.map((item) => (
-                <Link
-                  key={`${item.section}-${item.article}-${
-                    item.productKey || item.article
-                  }`}
-                  href={
-                    item.productKey
-                      ? `/product/${encodeURIComponent(
-                          item.section
-                        )}/${encodeURIComponent(
-                          item.article
-                        )}/${encodeURIComponent(item.productKey)}`
-                      : `/product/${encodeURIComponent(
-                          item.section
-                        )}/${encodeURIComponent(item.article)}`
-                  }
-                  className="rounded-2xl bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
-                >
-                  <div className="text-sm text-neutral-500">
-                    {item.section}
-                  </div>
+              {searchResults.map((item) => {
+                const previewUrl = item.images[0]
+                  ? `/api/preview?section=${encodeURIComponent(
+                      item.section
+                    )}&article=${encodeURIComponent(
+                      item.article
+                    )}&file=${encodeURIComponent(item.images[0])}`
+                  : "";
 
-                  <div className="mt-1 text-xl font-semibold">
-                    {item.title || item.article}
-                  </div>
+                return (
+                  <div
+                    key={`${item.section}-${item.article}-${
+                      item.productKey || item.article
+                    }`}
+                    className="rounded-2xl bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
+                  >
+                    <Link
+                      href={
+                        item.productKey
+                          ? `/product/${encodeURIComponent(
+                              item.section
+                            )}/${encodeURIComponent(
+                              item.article
+                            )}/${encodeURIComponent(item.productKey)}`
+                          : `/product/${encodeURIComponent(
+                              item.section
+                            )}/${encodeURIComponent(item.article)}`
+                      }
+                    >
+                      <div className="text-sm text-neutral-500">
+                        {item.section}
+                      </div>
 
-                  <div className="mt-2 text-sm text-neutral-500">
-                    Фото: {item.images.length}
-                  </div>
+                      <div className="mt-1 text-xl font-semibold">
+                        {item.title || item.article}
+                      </div>
 
-                  <div className="mt-4 flex h-80 w-full items-center justify-center overflow-hidden rounded-xl bg-white">
-                    {item.images[0] && (
-                      <img
-                        src={`/api/preview?section=${encodeURIComponent(
-                          item.section
-                        )}&article=${encodeURIComponent(
-                          item.article
-                        )}&file=${encodeURIComponent(item.images[0])}`}
-                        alt={item.images[0]}
-                        loading="lazy"
-                        decoding="async"
-                        className="h-full w-full object-contain"
+                      <div className="mt-2 text-sm text-neutral-500">
+                        Фото: {item.images.length}
+                      </div>
+
+                      <div className="mt-4 flex h-80 w-full items-center justify-center overflow-hidden rounded-xl bg-white">
+                        {item.images[0] && (
+                          <img
+                            src={previewUrl}
+                            alt={item.images[0]}
+                            loading="lazy"
+                            decoding="async"
+                            className="h-full w-full object-contain"
+                          />
+                        )}
+                      </div>
+                    </Link>
+
+                    {item.productKey && (
+                      <FavoriteButton
+                        item={{
+                          section: item.section,
+                          article: item.article,
+                          productKey: item.productKey,
+                          title: item.title || item.article,
+                          previewUrl,
+                        }}
+                        className="mt-4 w-full"
                       />
                     )}
                   </div>
-                </Link>
-              ))}
+                );
+              })}
             </div>
           </section>
         )}

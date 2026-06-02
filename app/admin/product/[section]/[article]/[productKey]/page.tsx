@@ -9,6 +9,7 @@ type Article = {
   title?: string;
   images: string[];
   productKey?: string;
+  model?: string;
 };
 
 type Section = {
@@ -42,6 +43,17 @@ type ArticleAttribute = {
   sortOrder: number;
 };
 
+type ProductSetItem = {
+  id: string;
+  section: string;
+  article: string;
+  productKey: string;
+};
+
+type CatalogProduct = Article & {
+  section: string;
+};
+
 export default function AdminProductPage() {
   const params = useParams();
 
@@ -56,6 +68,9 @@ export default function AdminProductPage() {
   const [tags, setTags] = useState<Tag[]>([]);
   const [articleTags, setArticleTags] = useState<ArticleTag[]>([]);
   const [attributes, setAttributes] = useState<ArticleAttribute[]>([]);
+  const [catalogProducts, setCatalogProducts] = useState<CatalogProduct[]>([]);
+  const [setItems, setSetItems] = useState<ProductSetItem[]>([]);
+  const [setQuery, setSetQuery] = useState("");
 
   async function loadProduct() {
     const res = await fetch("/api/catalog");
@@ -68,6 +83,16 @@ export default function AdminProductPage() {
         item.productKey === productKey
     );
 
+    setCatalogProducts(
+      data.flatMap((catalogSection) =>
+        catalogSection.articles
+          .filter((item) => item.productKey)
+          .map((item) => ({
+            ...item,
+            section: catalogSection.section,
+          }))
+      )
+    );
     setImages(article?.images || []);
     setTitle(article?.title || articleName);
   }
@@ -104,11 +129,27 @@ export default function AdminProductPage() {
     setAttributes(data);
   }
 
+  async function loadSetItems() {
+    const res = await fetch(
+      `/api/admin/product-sets?section=${encodeURIComponent(
+        sectionName
+      )}&article=${encodeURIComponent(
+        articleName
+      )}&productKey=${encodeURIComponent(productKey)}`
+    );
+
+    if (!res.ok) return;
+
+    const data = await res.json();
+    setSetItems(data.items || []);
+  }
+
   useEffect(() => {
     loadProduct();
     loadTags();
     loadArticleTags();
     loadAttributes();
+    loadSetItems();
   }, []);
 
   async function toggleTag(tag: Tag) {
@@ -192,6 +233,110 @@ export default function AdminProductPage() {
     setStatus(`Фото удалено: ${file}`);
     await loadProduct();
   }
+
+  async function addSetItem(item: CatalogProduct) {
+    if (!item.productKey) return;
+
+    const res = await fetch("/api/admin/product-sets", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        section: sectionName,
+        article: articleName,
+        productKey,
+        item: {
+          section: item.section,
+          article: item.article,
+          productKey: item.productKey,
+        },
+      }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      setStatus(data.error || "Ошибка добавления в комплект.");
+      return;
+    }
+
+    setStatus("Изделие добавлено в комплект.");
+    setSetQuery("");
+    await loadSetItems();
+  }
+
+  async function removeSetItem(item: ProductSetItem) {
+    const res = await fetch("/api/admin/product-sets", {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        section: sectionName,
+        article: articleName,
+        productKey,
+        item: {
+          section: item.section,
+          article: item.article,
+          productKey: item.productKey,
+        },
+      }),
+    });
+
+    if (!res.ok) {
+      setStatus("Ошибка удаления из комплекта.");
+      return;
+    }
+
+    setStatus("Изделие удалено из комплекта.");
+    await loadSetItems();
+  }
+
+  function findCatalogProduct(item: ProductSetItem) {
+    return catalogProducts.find(
+      (product) =>
+        product.section === item.section &&
+        product.article === item.article &&
+        product.productKey === item.productKey
+    );
+  }
+
+  const setSearchResults = catalogProducts
+    .filter((item) => {
+      if (
+        item.section === sectionName &&
+        item.article === articleName &&
+        item.productKey === productKey
+      ) {
+        return false;
+      }
+
+      const alreadyInSet = setItems.some(
+        (setItem) =>
+          setItem.section === item.section &&
+          setItem.article === item.article &&
+          setItem.productKey === item.productKey
+      );
+
+      if (alreadyInSet) return false;
+
+      const normalizedQuery = setQuery.trim().toLowerCase();
+      if (!normalizedQuery) return false;
+
+      return [
+        item.section,
+        item.article,
+        item.title,
+        item.model,
+        item.productKey,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(normalizedQuery);
+    })
+    .slice(0, 12);
 
   return (
     <main className="min-h-screen bg-neutral-100 p-8 text-neutral-900">
@@ -284,6 +429,100 @@ export default function AdminProductPage() {
                 </button>
               );
             })}
+          </div>
+        </section>
+
+        <section className="mb-8 rounded-2xl bg-white p-5 shadow-sm">
+          <h2 className="text-2xl font-semibold">Комплект</h2>
+
+          <div className="mt-4">
+            <input
+              className="w-full rounded-xl border border-neutral-300 px-4 py-3 outline-none"
+              placeholder="Поиск изделия по разделу, модели или productKey..."
+              value={setQuery}
+              onChange={(e) => setSetQuery(e.target.value)}
+            />
+          </div>
+
+          {setSearchResults.length > 0 && (
+            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+              {setSearchResults.map((item) => (
+                <div
+                  key={`${item.section}-${item.article}-${item.productKey}`}
+                  className="flex items-center justify-between gap-3 rounded-xl border border-neutral-200 p-3"
+                >
+                  <div>
+                    <div className="font-medium">
+                      {item.title || item.article}
+                    </div>
+                    <div className="text-xs text-neutral-500">
+                      {item.section} · {item.article} ·{" "}
+                      {item.productKey?.replaceAll("-", ".")}
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => addSetItem(item)}
+                    className="rounded-xl bg-neutral-900 px-3 py-2 text-sm text-white"
+                  >
+                    Добавить в комплект
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+            {setItems.map((item) => {
+              const product = findCatalogProduct(item);
+              const previewUrl = product?.images[0]
+                ? `/api/preview?section=${encodeURIComponent(
+                    item.section
+                  )}&article=${encodeURIComponent(
+                    item.article
+                  )}&file=${encodeURIComponent(product.images[0])}`
+                : "";
+
+              return (
+                <div
+                  key={item.id}
+                  className="rounded-2xl border border-neutral-200 p-3"
+                >
+                  {previewUrl && (
+                    <img
+                      src={previewUrl}
+                      alt={product?.title || item.productKey}
+                      loading="lazy"
+                      decoding="async"
+                      className="h-48 w-full rounded-xl object-contain"
+                    />
+                  )}
+
+                  <div className="mt-3 font-medium">
+                    {product?.title || item.productKey}
+                  </div>
+                  <div className="mt-1 text-xs text-neutral-500">
+                    {item.section} · {item.article} ·{" "}
+                    {item.productKey.replaceAll("-", ".")}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => removeSetItem(item)}
+                    className="mt-3 w-full rounded-xl bg-neutral-200 px-4 py-2 text-sm text-neutral-900"
+                  >
+                    Удалить из комплекта
+                  </button>
+                </div>
+              );
+            })}
+
+            {setItems.length === 0 && (
+              <div className="rounded-xl bg-neutral-100 p-4 text-sm text-neutral-500">
+                Комплект пока пуст.
+              </div>
+            )}
           </div>
         </section>
 

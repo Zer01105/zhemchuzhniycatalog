@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import FavoriteButton from "@/components/FavoriteButton";
 
 type Article = {
   article: string;
@@ -41,44 +42,64 @@ function ProductCard({
   sectionName: string;
   article: Article;
 }) {
+  const previewUrl = article.images[0]
+    ? `/api/preview?section=${encodeURIComponent(
+        sectionName
+      )}&article=${encodeURIComponent(article.article)}&file=${encodeURIComponent(
+        article.images[0]
+      )}`
+    : "";
+
   return (
-    <Link
+    <div
       key={`${article.article}-${article.productKey || article.article}`}
-      href={
-        article.productKey
-          ? `/product/${encodeURIComponent(sectionName)}/${encodeURIComponent(
-              article.article
-            )}/${encodeURIComponent(article.productKey)}`
-          : `/product/${encodeURIComponent(sectionName)}/${encodeURIComponent(
-              article.article
-            )}`
-      }
       className="rounded-2xl bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
     >
-      <div className="text-xl font-semibold">
-        {article.title || article.article}
-      </div>
+      <Link
+        href={
+          article.productKey
+            ? `/product/${encodeURIComponent(sectionName)}/${encodeURIComponent(
+                article.article
+              )}/${encodeURIComponent(article.productKey)}`
+            : `/product/${encodeURIComponent(sectionName)}/${encodeURIComponent(
+                article.article
+              )}`
+        }
+      >
+        <div className="text-xl font-semibold">
+          {article.title || article.article}
+        </div>
 
-      <div className="mt-2 text-sm text-neutral-500">
-        Фото: {article.images.length}
-      </div>
+        <div className="mt-2 text-sm text-neutral-500">
+          Фото: {article.images.length}
+        </div>
 
-      <div className="mt-4 flex h-80 w-full items-center justify-center overflow-hidden rounded-xl bg-white">
-        {article.images[0] && (
-          <img
-            src={`/api/preview?section=${encodeURIComponent(
-              sectionName
-            )}&article=${encodeURIComponent(
-              article.article
-            )}&file=${encodeURIComponent(article.images[0])}`}
-            alt={article.images[0]}
-            loading="lazy"
-            decoding="async"
-            className="h-full w-full object-contain"
-          />
-        )}
-      </div>
-    </Link>
+        <div className="mt-4 flex h-80 w-full items-center justify-center overflow-hidden rounded-xl bg-white">
+          {article.images[0] && (
+            <img
+              src={previewUrl}
+              alt={article.images[0]}
+              loading="lazy"
+              decoding="async"
+              className="h-full w-full object-contain"
+            />
+          )}
+        </div>
+      </Link>
+
+      {article.productKey && (
+        <FavoriteButton
+          item={{
+            section: sectionName,
+            article: article.article,
+            productKey: article.productKey,
+            title: article.title || article.article,
+            previewUrl,
+          }}
+          className="mt-4 w-full"
+        />
+      )}
+    </div>
   );
 }
 
@@ -176,6 +197,10 @@ const matchesTag =
       <div className="mx-auto max-w-7xl">
         <Link href="/" className="text-sm text-neutral-500">
           ← Назад к разделам
+        </Link>
+
+        <Link href="/favorites" className="mt-3 inline-block text-sm text-neutral-500">
+          Избранное
         </Link>
 
         <header className="mt-6 mb-8">

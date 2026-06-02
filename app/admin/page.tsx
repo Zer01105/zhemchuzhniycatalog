@@ -31,6 +31,22 @@ type Tag = {
   createdAt: string;
 };
 
+type ImportLog = {
+  rowNumber: number;
+  section: string;
+  article: string;
+  productKey: string;
+  status: "success" | "skipped" | "error";
+  message: string;
+};
+
+type SelectedProduct = {
+  section: string;
+  article: string;
+  productKey: string;
+  title: string;
+};
+
 
 export default function AdminPage() {
   const [tags, setTags] = useState<Tag[]>([]);
@@ -61,6 +77,12 @@ const [importStatus, setImportStatus] = useState("");
 const [autoTagStatus, setAutoTagStatus] = useState("");
 const [isSyncingAutoTags, setIsSyncingAutoTags] = useState(false);
 const [isImporting, setIsImporting] = useState(false);
+const [importLogs, setImportLogs] = useState<ImportLog[]>([]);
+const [selectedProducts, setSelectedProducts] = useState<
+  Record<string, SelectedProduct>
+>({});
+const [bulkTagId, setBulkTagId] = useState("");
+const [bulkStatus, setBulkStatus] = useState("");
   async function loadCatalog() {
     const res = await fetch("/api/catalog");
     const data = await res.json();
@@ -125,6 +147,7 @@ async function importCatalogData(e: React.FormEvent) {
 
   setIsImporting(true);
   setImportStatus("Импорт...");
+  setImportLogs([]);
 
   const res = await fetch("/api/admin/import-catalog-data", {
     method: "POST",
@@ -140,14 +163,117 @@ async function importCatalogData(e: React.FormEvent) {
   }
 
   setImportStatus(
-    `Готово. Строк: ${data.processed}, тегов создано: ${data.tagsCreated}, тегов назначено: ${data.tagsLinked}, характеристик обновлено: ${data.attributesUpdated}.`
+    `Готово. Обработано: ${data.processed}, пропущено: ${data.skipped}, тегов создано: ${data.tagsCreated}, тегов назначено: ${data.tagsLinked}, характеристик обновлено: ${data.attributesUpdated}.`
   );
+  setImportLogs(data.logs || []);
 
   setImportFile(null);
   setIsImporting(false);
 
   await loadCatalog();
   await loadTags();
+}
+function downloadImportLog() {
+  if (importLogs.length === 0) return;
+
+  const content = importLogs
+    .map(
+      (log) =>
+        [
+          `Строка ${log.rowNumber}`,
+          log.status,
+          log.section || "-",
+          log.article || "-",
+          log.productKey || "-",
+          log.message,
+        ].join(" | ")
+    )
+    .join("\n");
+
+  const blob = new Blob([content], {
+    type: "text/plain;charset=utf-8",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "catalog-import-log.txt";
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function getSelectionKey(
+  sectionName: string,
+  articleName: string,
+  productKey: string
+) {
+  return `${sectionName}|${articleName}|${productKey}`;
+}
+
+function toggleProductSelection(sectionName: string, article: Article) {
+  if (!article.productKey) return;
+
+  const key = getSelectionKey(
+    sectionName,
+    article.article,
+    article.productKey
+  );
+
+  setSelectedProducts((current) => {
+    if (current[key]) {
+      const next = { ...current };
+      delete next[key];
+      return next;
+    }
+
+    return {
+      ...current,
+      [key]: {
+        section: sectionName,
+        article: article.article,
+        productKey: article.productKey!,
+        title: article.title || article.article,
+      },
+    };
+  });
+}
+
+async function updateSelectedTags(action: "add" | "remove") {
+  const items = Object.values(selectedProducts).map((item) => ({
+    section: item.section,
+    article: item.article,
+    productKey: item.productKey,
+  }));
+
+  if (!bulkTagId || items.length === 0) {
+    setBulkStatus("Выбери изделия и тег.");
+    return;
+  }
+
+  setBulkStatus("Обновление тегов...");
+
+  const res = await fetch("/api/admin/bulk-article-tags", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      action,
+      tagId: bulkTagId,
+      items,
+    }),
+  });
+
+  const data = await res.json();
+
+  if (!res.ok) {
+    setBulkStatus(data.error || "Ошибка массового обновления тегов.");
+    return;
+  }
+
+  setBulkStatus(
+    `Готово. Обработано: ${data.processed}, пропущено: ${data.skipped}.`
+  );
+  await loadCatalog();
 }
 async function deleteTag(tag: Tag) {
   const ok = confirm(`Удалить тег "${tag.name}"? Он будет снят со всех артикулов.`);
@@ -285,11 +411,15 @@ useEffect(() => {
   const filteredCatalog = catalog.map((section) => ({
     ...section,
     articles: section.articles.filter((article) =>
-      `${section.section} ${article.article}`
+      `${section.section} ${article.article} ${article.title || ""} ${
+        article.productKey || ""
+      }`
         .toLowerCase()
         .includes(query.toLowerCase())
     ),
   }));
+
+  const selectedProductList = Object.values(selectedProducts);
 async function clearAllCatalogData() {
   const ok = confirm(
     "Удалить ВСЕ теги и ВСЕ характеристики у всех артикулов?"
@@ -445,6 +575,53 @@ async function deleteArticle(sectionName: string, articleName: string) {
   {importStatus && (
     <div className="mt-4 rounded-xl bg-neutral-100 px-4 py-3 text-sm text-neutral-700">
       {importStatus}
+    </div>
+  )}
+
+  {importLogs.length > 0 && (
+    <div className="mt-4 rounded-xl border border-neutral-200 bg-neutral-50 p-4">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <h3 className="text-lg font-semibold">Лог импорта</h3>
+
+        <button
+          type="button"
+          onClick={downloadImportLog}
+          className="rounded-xl bg-neutral-900 px-4 py-2 text-sm text-white"
+        >
+          Скачать лог .txt
+        </button>
+      </div>
+
+      <div className="mt-4 max-h-72 overflow-auto rounded-xl border border-neutral-200 bg-white">
+        <table className="w-full text-left text-xs">
+          <thead className="bg-neutral-50 text-neutral-500">
+            <tr>
+              <th className="p-2">Строка</th>
+              <th className="p-2">Статус</th>
+              <th className="p-2">Раздел</th>
+              <th className="p-2">Артикул</th>
+              <th className="p-2">Изделие</th>
+              <th className="p-2">Сообщение</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {importLogs.map((log) => (
+              <tr
+                key={`${log.rowNumber}-${log.section}-${log.article}-${log.productKey}`}
+                className="border-t border-neutral-100"
+              >
+                <td className="p-2">{log.rowNumber}</td>
+                <td className="p-2">{log.status}</td>
+                <td className="p-2">{log.section || "-"}</td>
+                <td className="p-2">{log.article || "-"}</td>
+                <td className="p-2">{log.productKey || "-"}</td>
+                <td className="p-2">{log.message}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )}
 </section>
@@ -740,6 +917,79 @@ async function deleteArticle(sectionName: string, articleName: string) {
     </table>
   </div>
 </section>
+        <section className="mb-8 rounded-2xl bg-white p-5 shadow-sm">
+          <h2 className="text-2xl font-semibold">Массовое назначение тегов</h2>
+
+          <p className="mt-2 text-sm text-neutral-500">
+            Выбери изделия в таблицах ниже, затем добавь или удали существующий тег.
+          </p>
+
+          <div className="mt-5 grid gap-4 md:grid-cols-[2fr_1fr_1fr_1fr]">
+            <select
+              className="rounded-xl border border-neutral-300 bg-white px-4 py-3 outline-none"
+              value={bulkTagId}
+              onChange={(e) => setBulkTagId(e.target.value)}
+            >
+              <option value="">Выбери тег</option>
+              {tags.map((tag) => (
+                <option key={tag.id} value={tag.id}>
+                  {tag.name}
+                </option>
+              ))}
+            </select>
+
+            <button
+              type="button"
+              onClick={() => updateSelectedTags("add")}
+              className="rounded-xl bg-neutral-900 px-4 py-3 text-white"
+            >
+              Назначить тег выбранным
+            </button>
+
+            <button
+              type="button"
+              onClick={() => updateSelectedTags("remove")}
+              className="rounded-xl bg-neutral-200 px-4 py-3 text-neutral-900"
+            >
+              Удалить тег у выбранных
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setSelectedProducts({})}
+              className="rounded-xl border border-neutral-300 px-4 py-3 text-neutral-700"
+            >
+              Снять выбор
+            </button>
+          </div>
+
+          <div className="mt-4 text-sm text-neutral-500">
+            Выбрано изделий: {selectedProductList.length}
+          </div>
+
+          {selectedProductList.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {selectedProductList.map((item) => (
+                <span
+                  key={getSelectionKey(
+                    item.section,
+                    item.article,
+                    item.productKey
+                  )}
+                  className="rounded-full bg-neutral-100 px-3 py-1 text-xs"
+                >
+                  {item.title} · {item.productKey.replaceAll("-", ".")}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {bulkStatus && (
+            <div className="mt-4 rounded-xl bg-neutral-100 px-4 py-3 text-sm text-neutral-700">
+              {bulkStatus}
+            </div>
+          )}
+        </section>
         <input
           className="mb-8 w-full rounded-xl border border-neutral-300 bg-white px-4 py-3 outline-none"
           placeholder="Поиск по разделу или артикулу..."
@@ -779,6 +1029,7 @@ async function deleteArticle(sectionName: string, articleName: string) {
           <table className="w-full text-left text-sm">
             <thead className="bg-neutral-50 text-neutral-500">
               <tr>
+                <th className="p-3">Выбор</th>
                 <th className="p-3">Изделие</th>
                 <th className="p-3">Модель</th>
                 <th className="p-3">Фото</th>
@@ -792,6 +1043,29 @@ async function deleteArticle(sectionName: string, articleName: string) {
                   key={`${article.article}-${article.productKey || article.article}`}
                   className="border-t border-neutral-200"
                 >
+                  <td className="p-3">
+                    {article.productKey ? (
+                      <input
+                        type="checkbox"
+                        checked={
+                          !!selectedProducts[
+                            getSelectionKey(
+                              section.section,
+                              article.article,
+                              article.productKey
+                            )
+                          ]
+                        }
+                        onChange={() =>
+                          toggleProductSelection(section.section, article)
+                        }
+                        className="h-4 w-4"
+                      />
+                    ) : (
+                      <span className="text-xs text-neutral-400">-</span>
+                    )}
+                  </td>
+
                   <td className="p-3 font-medium">
                     {article.title || article.article}
                     {article.productKey && (

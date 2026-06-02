@@ -5,6 +5,16 @@ import fs from "fs";
 import path from "path";
 
 const ROOT = process.env.CATALOG_ROOT || "/data/catalog/B2B_Фото";
+const PRODUCT_TYPES = new Set(["1", "2", "3", "4"]);
+
+type ImportLog = {
+  rowNumber: number;
+  section: string;
+  article: string;
+  productKey: string;
+  status: "success" | "skipped" | "error";
+  message: string;
+};
 
 function slugify(value: string) {
   return value
@@ -29,22 +39,35 @@ function getValue(row: Record<string, unknown>, names: string[]) {
 }
 
 function normalizeProductKey(value: string) {
-  if (!value) return "";
+  const cleaned = value
+    .trim()
+    .replace(/\.(jpg|jpeg|png|webp)$/i, "");
 
-  const cleanValue = value.trim();
+  if (!cleaned) return null;
 
-  if (cleanValue.includes("-")) {
-    return cleanValue;
-  }
-
-  const parts = cleanValue.split(".");
+  const parts = cleaned.includes("-") ? cleaned.split("-") : cleaned.split(".");
   const typeId = parts[0];
   const model = parts[1]?.padStart(4, "0");
-  const modification = parts.slice(2).join(".");
+  const modification = parts.slice(2).join(cleaned.includes("-") ? "-" : ".");
 
-  if (!typeId || !model) return cleanValue;
+  if (!PRODUCT_TYPES.has(typeId) || !model || !/^\d+$/.test(model)) {
+    return null;
+  }
 
   return [typeId, model, modification || "base"].join("-");
+}
+
+function getArticleVariants(article: string) {
+  return Array.from(
+    new Set(
+      [
+        article,
+        article.slice(-3),
+        article.replace(/^0+/, ""),
+        String(Number(article)),
+      ].filter(Boolean)
+    )
+  );
 }
 
 const SERVICE_COLUMNS = new Set([
@@ -70,15 +93,19 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer());
     const workbook = XLSX.read(buffer, { type: "buffer" });
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
+    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
+      defval: "",
+    });
 
     let processed = 0;
     let skipped = 0;
     let tagsCreated = 0;
     let tagsLinked = 0;
     let attributesUpdated = 0;
+    const logs: ImportLog[] = [];
 
-    for (const row of rows) {
+    for (const [index, row] of rows.entries()) {
+      const rowNumber = index + 2;
       const section = getValue(row, ["section", "Раздел", "раздел"]);
       const article = getValue(row, ["article", "Модель", "модель"]);
       const rawProductKey = getValue(row, [
@@ -92,40 +119,44 @@ export async function POST(req: NextRequest) {
 
       if (!section || !article) {
         skipped++;
+        logs.push({
+          rowNumber,
+          section,
+          article,
+          productKey: productKey || rawProductKey,
+          status: "skipped",
+          message: "Пропущено: нет section/article",
+        });
         continue;
       }
 
-
-const articleVariants = Array.from(
-  new Set([
-    article,
-    article.slice(-3),
-    article.replace(/^0+/, ""),
-    String(Number(article)),
-  ].filter(Boolean))
-);
-
-const articleFolder = articleVariants.find(
-
-  (variant) =>
-
-    variant &&
-
-    fs.existsSync(
-
-      path.join(ROOT, section, variant)
-
-    )
-
-);
-
-if (!articleFolder) {
+      if (!productKey) {
         skipped++;
+        logs.push({
+          rowNumber,
+          section,
+          article,
+          productKey: rawProductKey,
+          status: "error",
+          message: "Ошибка: неверный productKey",
+        });
+        continue;
+      }
 
-        console.log(
-          `Пропущен артикул ${section}/${article}: нет папки`
-        );
+      const articleFolder = getArticleVariants(article).find(
+        (variant) => variant && fs.existsSync(path.join(ROOT, section, variant))
+      );
 
+      if (!articleFolder) {
+        skipped++;
+        logs.push({
+          rowNumber,
+          section,
+          article,
+          productKey,
+          status: "skipped",
+          message: "Пропущено: нет папки артикула",
+        });
         continue;
       }
 
@@ -216,6 +247,14 @@ if (!articleFolder) {
       }
 
       processed++;
+      logs.push({
+        rowNumber,
+        section,
+        article: articleFolder,
+        productKey,
+        status: "success",
+        message: "Импортировано",
+      });
     }
 
     return NextResponse.json({
@@ -225,6 +264,7 @@ if (!articleFolder) {
       tagsCreated,
       tagsLinked,
       attributesUpdated,
+      logs,
     });
   } catch (error) {
     console.error(error);
