@@ -4,7 +4,7 @@ const { PrismaClient } = require("@prisma/client");
 
 const prisma = new PrismaClient();
 
-const ROOT = "/data/catalog/B2B_Фото";
+const ROOT = process.env.CATALOG_ROOT || "/data/catalog/B2B_Фото";
 const JEWELRY_SECTIONS = new Set(["Золото", "Серебро"]);
 const IMAGE_RE = /\.(jpg|jpeg|png|webp)$/i;
 
@@ -38,6 +38,7 @@ function parseJewelryFile(file) {
 
   const typeId = parts[0];
   const model = parts[1]?.padStart(4, "0");
+  const pearlType = parts[3]?.toLowerCase();
   const modification = parts.slice(2).join(".");
 
   if (!PRODUCT_TYPES[typeId] || !model) return null;
@@ -45,8 +46,17 @@ function parseJewelryFile(file) {
   return {
     typeId,
     productType: PRODUCT_TYPES[typeId],
+    pearlType,
     productKey: [typeId, model, modification || "base"].join("-"),
   };
+}
+
+function getPearlTagName(pearlType) {
+  if (!pearlType) return null;
+  if (pearlType === "b") return null;
+  if (pearlType === "d") return "Капля";
+
+  return "Барочный";
 }
 
 async function getOrCreateTag(name) {
@@ -65,6 +75,30 @@ async function getOrCreateTag(name) {
   return tag;
 }
 
+async function attachTag({ section, article, productKey, tagName }) {
+  const tag = await getOrCreateTag(tagName);
+
+  await prisma.articleTag.upsert({
+    where: {
+      section_article_productKey_tagId: {
+        section,
+        article,
+        productKey,
+        tagId: tag.id,
+      },
+    },
+    update: {},
+    create: {
+      section,
+      article,
+      productKey,
+      tagId: tag.id,
+    },
+  });
+
+  console.log(`${section}/${article}/${productKey} → ${tag.name}`);
+}
+
 async function main() {
   for (const section of fs.readdirSync(ROOT)) {
     if (!JEWELRY_SECTIONS.has(section)) continue;
@@ -77,37 +111,33 @@ async function main() {
       if (!fs.statSync(articlePath).isDirectory()) continue;
 
       const images = fs.readdirSync(articlePath).filter(isValidImage);
-      const productKeys = new Map();
+      const products = new Map();
 
       for (const file of images) {
         const parsed = parseJewelryFile(file);
         if (!parsed) continue;
 
-        productKeys.set(parsed.productKey, parsed.productType);
+        products.set(parsed.productKey, parsed);
       }
 
-      for (const [productKey, productType] of productKeys.entries()) {
-        const tag = await getOrCreateTag(productType);
-
-        await prisma.articleTag.upsert({
-          where: {
-            section_article_productKey_tagId: {
-              section,
-              article: folderArticle,
-              productKey,
-              tagId: tag.id,
-            },
-          },
-          update: {},
-          create: {
-            section,
-            article: folderArticle,
-            productKey,
-            tagId: tag.id,
-          },
+      for (const parsed of products.values()) {
+        await attachTag({
+          section,
+          article: folderArticle,
+          productKey: parsed.productKey,
+          tagName: parsed.productType,
         });
 
-        console.log(`${section}/${folderArticle}/${productKey} → ${tag.name}`);
+        const pearlTagName = getPearlTagName(parsed.pearlType);
+
+        if (pearlTagName) {
+          await attachTag({
+            section,
+            article: folderArticle,
+            productKey: parsed.productKey,
+            tagName: pearlTagName,
+          });
+        }
       }
     }
   }

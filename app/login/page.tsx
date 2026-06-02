@@ -36,22 +36,21 @@ export default function LoginPage() {
         <h1 className="mb-6 text-2xl font-semibold">
           Вход в каталог
         </h1>
+<input
+  type="text"
+  placeholder="Логин"
+  value={login}
+  onChange={(e) => setLogin(e.target.value)}
+  className="mb-4 w-full rounded-xl border border-neutral-300 bg-white px-4 py-3 text-neutral-900 placeholder:text-neutral-400"
+/>
 
-        <input
-          type="text"
-          placeholder="Логин"
-          value={login}
-          onChange={(e) => setLogin(e.target.value)}
-          className="mb-4 w-full rounded-xl border px-4 py-3"
-        />
-
-        <input
-          type="password"
-          placeholder="Пароль"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="mb-4 w-full rounded-xl border px-4 py-3"
-        />
+<input
+  type="password"
+  placeholder="Пароль"
+  value={password}
+  onChange={(e) => setPassword(e.target.value)}
+  className="mb-4 w-full rounded-xl border border-neutral-300 bg-white px-4 py-3 text-neutral-900 placeholder:text-neutral-400"
+/>
 
         <button className="w-full rounded-xl bg-black px-4 py-3 text-white">
           Войти

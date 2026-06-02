@@ -95,33 +95,44 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      const articleVariants = [
-  article,
-  article.replace(/^0+/, ""),
-  String(Number(article)),
-];
 
-const articleExists = articleVariants.some((variant) =>
-  variant &&
-  fs.existsSync(
-    path.join(ROOT, section, variant)
-  )
+const articleVariants = Array.from(
+  new Set([
+    article,
+    article.slice(-3),
+    article.replace(/^0+/, ""),
+    String(Number(article)),
+  ].filter(Boolean))
 );
 
-if (!articleExists) {
-  skipped++;
+const articleFolder = articleVariants.find(
 
-  console.log(
-    `Пропущен артикул ${section}/${article}: нет папки`
-  );
+  (variant) =>
 
-  continue;
-}
+    variant &&
+
+    fs.existsSync(
+
+      path.join(ROOT, section, variant)
+
+    )
+
+);
+
+if (!articleFolder) {
+        skipped++;
+
+        console.log(
+          `Пропущен артикул ${section}/${article}: нет папки`
+        );
+
+        continue;
+      }
 
       await prisma.articleTag.deleteMany({
         where: {
           section,
-          article,
+          article: articleFolder,
           productKey,
         },
       });
@@ -153,7 +164,7 @@ if (!articleExists) {
           where: {
             section_article_productKey_tagId: {
               section,
-              article,
+              article: articleFolder,
               productKey,
               tagId: tag.id,
             },
@@ -161,7 +172,7 @@ if (!articleExists) {
           update: {},
           create: {
             section,
-            article,
+            article: articleFolder,
             productKey,
             tagId: tag.id,
           },
@@ -173,7 +184,7 @@ if (!articleExists) {
       await prisma.articleAttribute.deleteMany({
         where: {
           section,
-          article,
+          article: articleFolder,
           productKey,
         },
       });
@@ -192,7 +203,7 @@ if (!articleExists) {
         await prisma.articleAttribute.create({
           data: {
             section,
-            article,
+            article: articleFolder,
             productKey,
             name: columnName,
             value,

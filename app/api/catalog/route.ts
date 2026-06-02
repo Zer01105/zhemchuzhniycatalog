@@ -48,27 +48,24 @@ export async function GET() {
   try {
     const sections = fs
 
-  .readdirSync(ROOT)
+      .readdirSync(ROOT)
 
-  .filter((item) =>
+      .filter((item) =>
 
-    fs.statSync(path.join(ROOT, item)).isDirectory()
+        fs.statSync(path.join(ROOT, item)).isDirectory()
 
-  );
+      );
 
     const data = sections.map((section) => {
       const sectionPath = path.join(ROOT, section);
 
       const articles = fs
-
   .readdirSync(sectionPath)
-
   .filter((item) =>
-
     fs.statSync(path.join(sectionPath, item)).isDirectory()
-
   )
-        .flatMap((folderArticle) => {
+  .sort((a, b) => Number(a) - Number(b))
+  .flatMap((folderArticle) => {
           const articlePath = path.join(sectionPath, folderArticle);
 
           const images = fs.readdirSync(articlePath).filter(isValidImage);
@@ -93,9 +90,8 @@ export async function GET() {
             if (!groups.has(parsed.productKey)) {
               groups.set(parsed.productKey, {
                 article: folderArticle,
-                title: `${parsed.productType} ${parsed.model}${
-                  parsed.modification ? ` ${parsed.modification}` : ""
-                }`,
+                title: `${parsed.productType} ${parsed.model}${parsed.modification ? ` ${parsed.modification}` : ""
+                  }`,
                 model: parsed.model,
                 productKey: parsed.productKey,
                 productTypeId: parsed.typeId,
@@ -110,7 +106,27 @@ export async function GET() {
 
           return Array.from(groups.values());
         });
+        articles.sort((a, b) => {
+  const modelCompare = String(a.model || a.article).localeCompare(
+    String(b.model || b.article),
+    undefined,
+    {
+      numeric: true,
+      sensitivity: "base",
+    }
+  );
 
+  if (modelCompare !== 0) return modelCompare;
+
+  return String(a.productKey || "").localeCompare(
+    String(b.productKey || ""),
+    undefined,
+    {
+      numeric: true,
+      sensitivity: "base",
+    }
+  );
+});
       return {
         section,
         articles,
